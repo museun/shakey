@@ -1,0 +1,15 @@
+[package]
+name = "shakey"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow           = "1.0.62"
+fastrand         = "1.8.0"
+parking_lot      = "0.12.1"
+pin-project-lite = "0.2.9"
+serde            = { version = "1.0.144", features = ["derive"] }
+serde_yaml       = "0.9.10"
+simple_env_load  = "0.2.0"
+tokio            = { version = "1.20.1", features = ["rt", "sync", "fs", "macros", "io-util", "net", "parking_lot"] }
+tokio-stream     = "0.1.9"

@@ -1,0 +1,14 @@
+system:
+  error:
+    default: 'oops something happened: ${error}'
+hello:
+  ping:
+    default: ping?
+  say_hello:
+    default: hello, ${name}
+    discord: hello, ${name}
+
+foo:
+  print:
+    discord: "answer is: ${result}"
+    default: "answer is: ${foo}"
