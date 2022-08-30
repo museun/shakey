@@ -64,8 +64,6 @@ pub fn parse_line(input: &str) -> Result<Line<'_>, &'static str> {
         Some(input.trim_end()).filter(|s| !s.is_empty())
     }
 
-    eprintln!("<- {}", input.escape_debug());
-
     let line = input;
     let raw = &mut input.trim();
 

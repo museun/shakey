@@ -1,13 +1,11 @@
-use crate::make_response;
-
 mod outcome;
-use outcome::Outcome;
+pub use outcome::Outcome;
 
 mod callable;
 pub use callable::Callable;
 
 mod bind;
-pub use bind::Bind;
+pub use bind::{Bind, Commands};
 
 mod response;
 pub use response::Response;
@@ -15,10 +13,8 @@ pub use response::Response;
 mod reply;
 pub use reply::Reply;
 
-make_response!(
-    module: "system";
-    key: "command_error";
-    struct Error {
-        error: String,
-    }
-);
+mod arguments;
+pub use arguments::{Arguments, ExampleArgs};
+
+// why is this in that module?
+pub use crate::irc::Replier;

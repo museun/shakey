@@ -1,14 +1,21 @@
 system:
-  error:
+  command_error:
     default: 'oops something happened: ${error}'
-hello:
-  ping:
-    default: ping?
-  say_hello:
-    default: hello, ${name}
-    discord: hello, ${name}
+  invalid_usage:
+    default: "invalid arguments: ${usage}"
 
-foo:
-  print:
-    discord: "answer is: ${result}"
-    default: "answer is: ${foo}"
+builtin:
+  hello:
+    default: "${greeting}, ${sender}!"
+  ping:
+    default: "pong: ${time}"
+  ping_with_token:
+    default: "pong: ${time} (token: ${token})"
+  time:
+    default: "the current time for the bot is: ${now}"
+  bot_uptime:
+    default: "the bot has been running for ${uptime}"
+  version:
+    default: "${revision} on branch `${branch}` built at: ${build_time}"
+  say_hello:
+    default: "${greeting}, ${sender}."

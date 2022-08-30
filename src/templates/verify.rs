@@ -1,124 +1,96 @@
-use crate::{Response, Templates, Variant};
-use std::{collections::HashSet, sync::Arc};
+use anyhow::Context;
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
+use serde::Serialize;
 
-#[derive(Debug)]
-pub struct Error {
-    module: &'static str,
-    key: &'static str,
-    variants: Vec<Variant>,
-    kind: ErrorKind,
+use crate::{ext::IterExt, global::templates, handler::Response};
+use std::collections::{BTreeSet, HashMap};
+
+#[derive(Default)]
+struct ResponseRegistry {
+    responses: HashMap<(&'static str, &'static str), Box<dyn Response>>,
 }
 
-impl Error {
-    fn new(ty: &dyn Response, variants: Vec<Variant>, kind: ErrorKind) -> Self {
-        Self {
-            module: ty.module(),
-            key: ty.key(),
-            variants,
-            kind,
-        }
-    }
-}
+static RESPONSE_REGISTRY: Lazy<Mutex<ResponseRegistry>> =
+    Lazy::new(|| Mutex::new(ResponseRegistry::default()));
 
-#[derive(Debug)]
-pub enum ErrorKind {
-    MissingTemplate,
-    EmptyStruct,
-    NoVariants,
-    Mismatched {
-        keys: Vec<String>,
-        available: Vec<&'static str>,
-    },
-}
+pub fn add_to_registry<T>() -> anyhow::Result<()>
+where
+    T: Response + Default + Serialize + 'static,
+{
+    use std::collections::hash_map::Entry::*;
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self {
-            module,
-            key,
-            variants,
-            ..
-        } = self;
-
-        write!(f, "`{module}.{key}@{variants:?}` ")?;
-
-        use ErrorKind::*;
-        match &self.kind {
-            MissingTemplate => {
-                write!(f, "template is missing")
-            }
-            EmptyStruct => {
-                write!(f, "the `Response` struct had no fields")
-            }
-            NoVariants => {
-                write!(f, "no variants were provided")
-            }
-            Mismatched { keys, available } => {
-                write!(
-                    f,
-                    "extra keys were found in template: {keys:?}. available: {available:?}",
-                )
-            }
-        }
-    }
-}
-impl std::error::Error for Error {}
-
-pub struct Verifier {
-    pub templates: Arc<Templates>,
-}
-
-impl Verifier {
-    pub fn verify<T>(self, variants: &[Variant]) -> Result<Self, Error>
-    where
-        T: Response + Default + serde::Serialize,
+    let this = T::default();
+    match RESPONSE_REGISTRY
+        .lock()
+        .responses
+        .entry((this.module(), this.key()))
     {
-        let this = T::default();
-        if variants.is_empty() {
-            return Err(Error::new(&this, vec![], ErrorKind::NoVariants));
+        Occupied(..) => {
+            anyhow::bail!("response already exists: {}", &this as &dyn Response)
         }
-
-        let fields = crate::ser::get_fields::<T>();
-        if fields.is_empty() {
-            return Err(Error::new(&this, variants.to_vec(), ErrorKind::EmptyStruct));
+        Vacant(entry) => {
+            verify(T::default())?;
+            entry.insert(Box::new(this));
+            Ok(())
         }
-
-        let fields_set = fields.iter().copied().collect::<HashSet<_>>();
-        for variant in variants {
-            let keys = match self
-                .templates
-                .maybe_find(this.module(), this.key(), *variant)
-            {
-                Some(parsed) => &parsed.keys,
-                None => {
-                    return Err(Error::new(
-                        &this,
-                        vec![*variant],
-                        ErrorKind::MissingTemplate,
-                    ))
-                }
-            };
-
-            let diff = keys
-                .iter()
-                .map(|s| &**s)
-                .collect::<HashSet<_>>()
-                .difference(&fields_set)
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>();
-
-            if !diff.is_empty() {
-                return Err(Error::new(
-                    &this,
-                    vec![*variant],
-                    ErrorKind::Mismatched {
-                        keys: diff,
-                        available: fields,
-                    },
-                ));
-            }
-        }
-
-        Ok(self)
     }
+}
+
+fn verify<T>(response: T) -> anyhow::Result<()>
+where
+    T: Response + Serialize + 'static,
+{
+    let fields = crate::ser::get_fields_for(&response)
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+
+    anyhow::ensure!(
+        !fields.is_empty(),
+        "an empty struct was provided for: {}",
+        &response as &dyn Response
+    );
+
+    let templates = templates();
+
+    anyhow::ensure!(
+        templates
+            .get_entries(response.module(), response.key())
+            .is_some(),
+        "cannot find any templates for: {}",
+        &response as &dyn Response
+    );
+
+    for variant in templates
+        .variants_for(response.module(), response.key())
+        .with_context(|| {
+            anyhow::anyhow!(
+                "cannot find any variants for: {}",
+                &response as &dyn Response,
+            )
+        })?
+    {
+        let keys = match templates.maybe_find(response.module(), response.key(), variant) {
+            Some(parsed) => &parsed.keys,
+            None => {
+                anyhow::bail!(
+                    "missing template for: {}@{:?}",
+                    &response as &dyn Response,
+                    variant
+                );
+            }
+        };
+
+        let left = keys.iter().map(|s| &**s).collect::<BTreeSet<_>>();
+        anyhow::ensure!(
+            left.difference(&fields).count() == 0,
+            "mismatched variables in: {}@{:?} found [{}], have [{}]",
+            &response as &dyn Response,
+            variant,
+            left.iter().join_with(", "),
+            fields.iter().join_with(", ")
+        );
+    }
+
+    Ok(())
 }

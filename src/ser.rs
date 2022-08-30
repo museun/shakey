@@ -1,12 +1,19 @@
 #![cfg_attr(debug_assertions, allow(dead_code, unused_variables,))]
 
-use crate::Response;
+use crate::handler::Response;
 
 pub fn get_fields<T>() -> Vec<&'static str>
 where
     T: serde::Serialize + Response + Default,
 {
-    T::default().serialize(FieldSerializer).unwrap_or_default()
+    get_fields_for(&T::default())
+}
+
+pub fn get_fields_for<T>(this: &T) -> Vec<&'static str>
+where
+    T: serde::Serialize + Response,
+{
+    this.serialize(FieldSerializer).unwrap_or_default()
 }
 
 #[derive(Debug)]

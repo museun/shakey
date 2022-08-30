@@ -1,0 +1,237 @@
+#![cfg_attr(debug_assertions, allow(dead_code, unused_variables,))]
+
+use std::sync::Arc;
+
+use shakey::{get_env_var, irc, Commands, Templates};
+
+async fn initialize_templates() -> anyhow::Result<()> {
+    let path = get_env_var("SHAKEN_TEMPLATES_PATH")?;
+    let templates = Templates::load_from_yaml(&path).await.map(Arc::new)?;
+    shakey::global::GLOBAL_TEMPLATES.initialize(templates);
+    shakey::bind_system_errors()?;
+
+    tokio::spawn(async move {
+        if let Err(err) = Templates::watch_for_updates(path).await {
+            log::error!("could not reload templates: {err}");
+            std::process::exit(0) // TODO not this
+        }
+    });
+
+    Ok(())
+}
+
+async fn initialize_commands() -> anyhow::Result<()> {
+    let path = get_env_var("SHAKEN_COMMANDS_PATH")?;
+    let commands = Commands::load_from_yaml(&path).await.map(Arc::new)?;
+    shakey::global::GLOBAL_COMMANDS.initialize(commands);
+
+    tokio::spawn(async move {
+        if let Err(err) = Commands::watch_for_updates(path).await {
+            log::error!("could not reload commands: {err}");
+            std::process::exit(0) // TODO not this
+        }
+    });
+
+    Ok(())
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> anyhow::Result<()> {
+    simple_env_load::load_env_from([".dev.env", ".secrets.env"]);
+    alto_logger::init_term_logger()?;
+
+    loop {
+        initialize_commands().await?;
+        initialize_templates().await?;
+
+        let builtin = builtin::Builtin::bind().await?.into_callable();
+
+        if let Err(err) = async move {
+            shakey::irc::run([builtin]).await?;
+            anyhow::Result::<_, anyhow::Error>::Ok(())
+        }
+        .await
+        {
+            log::warn!("disconnected");
+
+            match () {
+                _ if err.is::<irc::errors::Connection>() => {}
+                _ if err.is::<irc::errors::Eof>() => {}
+                _ if err.is::<irc::errors::Timeout>() => {}
+                _ => {
+                    log::error!("{err}");
+                    std::process::exit(1)
+                }
+            }
+
+            log::warn!("reconnecting in 5 seconds");
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    }
+}
+
+mod builtin {
+    use std::{borrow::Cow, time::Duration};
+
+    use fastrand::Rng;
+    use fastrand_ext::SliceExt;
+    use shakey::{
+        data::{Interest, Watch, WatchFileYaml},
+        ext::FormatTime,
+        irc::{Message, Replier},
+        Arguments, Bind,
+    };
+    use time::{format_description::FormatItem, macros::format_description, OffsetDateTime};
+    use tokio::time::Instant;
+
+    shakey::make_response! {
+        module: "builtin"
+
+        struct Ping {
+            time: String
+        } is "ping"
+
+        struct PingWithToken {
+            time: String,
+            token: String
+        } is "ping_with_token"
+
+        struct Hello {
+            greeting: String,
+            sender: String
+        } is "hello"
+
+        struct Time {
+            now: String,
+        } is "time"
+
+        struct BotUptime {
+            uptime: String,
+        } is "bot_uptime"
+
+        struct Version {
+            revision: String,
+            branch: String,
+            build_time: String,
+        } is "version"
+
+        struct SayHello {
+            greeting: String,
+            sender: String
+        } is "say_hello"
+    }
+
+    #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
+    #[serde(transparent)]
+    pub struct Greetings(Vec<String>);
+
+    impl Greetings {
+        fn contains(&self, key: &str) -> bool {
+            self.0.iter().any(|s| s.eq_ignore_ascii_case(key))
+        }
+
+        fn choose(&self, rng: &Rng) -> Cow<'_, str> {
+            (!self.0.is_empty())
+                .then(|| self.0.choose(rng).map(|s| Cow::from(&**s)))
+                .flatten()
+                .unwrap_or(Cow::Borrowed("hello"))
+        }
+    }
+
+    impl Interest for Greetings {
+        fn module() -> &'static str {
+            "builtin"
+        }
+        fn file() -> &'static str {
+            "greetings.yaml"
+        }
+    }
+
+    pub struct Builtin {
+        uptime: Instant,
+        greetings: WatchFileYaml<Greetings>,
+    }
+
+    impl Builtin {
+        pub async fn bind<R>() -> anyhow::Result<Bind<Self, R>>
+        where
+            R: Replier + 'static,
+        {
+            let greetings = Greetings::watch().await?;
+            let this = Self {
+                greetings,
+                uptime: Instant::now(),
+            };
+
+            Bind::create::<responses::Responses>(this)?
+                .bind(Self::ping)?
+                .bind(Self::hello)?
+                .bind(Self::time)?
+                .bind(Self::bot_uptime)?
+                .bind(Self::version)?
+                .listen(Self::say_hello)
+        }
+
+        fn ping(&mut self, msg: &Message<impl Replier>, args: Arguments) -> anyhow::Result<()> {
+            let now = OffsetDateTime::now_local()?;
+            let ms: Duration = (now - msg.timestamp).try_into()?;
+            let time = format!("{ms:.1?}");
+
+            match args.get("token").map(ToString::to_string) {
+                Some(token) => msg.say(responses::PingWithToken { token, time }),
+                None => msg.say(responses::Ping { time }),
+            }
+
+            Ok(())
+        }
+
+        fn hello(&mut self, msg: &Message<impl Replier>, args: Arguments) {
+            let msg = msg.clone();
+            let greetings = self.greetings.clone();
+            tokio::spawn(async move {
+                let greetings = greetings.get().await;
+                let greeting = greetings.choose(&fastrand::Rng::new());
+                msg.say(responses::Hello {
+                    greeting: greeting.to_string(),
+                    sender: msg.sender.to_string(),
+                })
+            });
+        }
+
+        fn time(&mut self, msg: &Message<impl Replier>, args: Arguments) -> anyhow::Result<()> {
+            static FMT: &[FormatItem<'static>] = format_description!("[hour]:[minute]:[second]");
+            let now = OffsetDateTime::now_local()?.format(&FMT)?;
+            msg.say(responses::Time { now });
+            Ok(())
+        }
+
+        fn bot_uptime(&mut self, msg: &Message<impl Replier>, args: Arguments) {
+            let uptime = self.uptime.elapsed().as_readable_time();
+            msg.say(responses::BotUptime { uptime })
+        }
+
+        fn version(&mut self, msg: &Message<impl Replier>, args: Arguments) {
+            msg.say(responses::Version {
+                revision: shakey::GIT_REVISION.to_string(),
+                branch: shakey::GIT_BRANCH.to_string(),
+                build_time: shakey::BUILD_TIME.to_string(),
+            });
+        }
+
+        fn say_hello(&mut self, msg: &Message<impl Replier>) {
+            let msg = msg.clone();
+            let greetings = self.greetings.clone();
+            tokio::spawn(async move {
+                let data = msg.data.trim_end_matches(['!', '?', '.']);
+                let greetings = greetings.get().await;
+                if greetings.contains(data) {
+                    let greeting = greetings.choose(&fastrand::Rng::new());
+                    msg.say(responses::SayHello {
+                        greeting: greeting.to_string(),
+                        sender: msg.sender.to_string(),
+                    })
+                }
+            });
+        }
+    }
+}

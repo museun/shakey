@@ -1,43 +1,58 @@
-use std::sync::Arc;
+use std::{future::Future, path::PathBuf, time::Duration};
 
-pub fn get_env_var(key: &str) -> std::io::Result<String> {
-    eprintln!("loading: {key}");
-    std::env::var(key)
-        .map_err(|_| format!("expected '{key}' to exist in env"))
-        .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+pub fn get_env_var(key: &str) -> anyhow::Result<String> {
+    log::debug!("loading: {key}");
+    std::env::var(key).map_err(|_| anyhow::anyhow!("expected '{key}' to exist in env"))
 }
 
-#[derive(Debug, Clone)]
-pub enum ArcCow<'a> {
-    Borrowed(&'a str),
-    Owned(Arc<str>),
-}
+pub async fn watch_file<Fut>(
+    path: impl Into<PathBuf> + Send,
+    sleep: Duration,
+    modification: Duration,
+    update: impl FnOnce(PathBuf) -> Fut + Clone,
+) -> anyhow::Result<()>
+where
+    Fut: Future<Output = anyhow::Result<()>> + Send,
+{
+    let path = path.into();
 
-impl std::ops::Deref for ArcCow<'_> {
-    type Target = str;
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Borrowed(s) => s,
-            Self::Owned(s) => &**s,
+    let md = match tokio::fs::metadata(&path).await {
+        Ok(md) => md,
+        Err(err) => {
+            log::error!("cannot read metadata for {}, {err}", path.display());
+            anyhow::bail!("{err}")
         }
-    }
-}
+    };
 
-impl<'a> std::fmt::Display for ArcCow<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            Self::Borrowed(s) => s,
-            Self::Owned(s) => &**s,
+    let mut last = md.modified()?;
+
+    loop {
+        tokio::time::sleep(sleep).await;
+
+        let md = match tokio::fs::metadata(&path).await {
+            Ok(md) => md,
+            Err(err) => {
+                log::error!("cannot read metadata for {}, {err}", path.display());
+                continue;
+            }
         };
-        f.write_str(s)
-    }
-}
 
-impl<'a> ArcCow<'a> {
-    pub fn into_owned(self) -> ArcCow<'static> {
-        match self {
-            Self::Borrowed(inner) => ArcCow::Owned(Arc::from(inner)),
-            Self::Owned(inner) => ArcCow::Owned(inner),
+        if md
+            .modified()
+            .ok()
+            .and_then(|md| md.duration_since(last).ok())
+            .filter(|&dur| dur >= modification)
+            .is_some()
+        {
+            log::info!("file {} was modified", path.display());
+
+            if let Err(err) = (update.clone())(path.clone()).await {
+                log::warn!("cannot update file: {err}");
+                continue;
+            }
+            last = md
+                .modified()
+                .expect("already checked that the metadata exists")
         }
     }
 }

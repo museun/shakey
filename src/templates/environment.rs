@@ -22,6 +22,10 @@ impl<'f> BorrowedEnv<'f> {
     }
 }
 
+pub trait RegisterResponse {
+    fn register() -> anyhow::Result<()>;
+}
+
 #[macro_export]
 macro_rules! borrowed_env {
     ($($key:expr => $value:expr),* $(,)?) => {
@@ -31,31 +35,41 @@ macro_rules! borrowed_env {
 
 #[macro_export]
 macro_rules! make_response {
-    ($(
-        module: $module:expr;
-        key: $path:expr;
+    (module: $module:literal $(
         struct $name:ident $(< $($lifetimes:lifetime),* >)? {
             $($key:ident: $val:ty),* $(,)?
-        }
+        } is $path:literal
     )*) => {
-        $($crate::make_response!(@inner
-            module: $module;
-            key: $path;
-            struct $name $(< $($lifetimes),* >)? {
-                $($key: $val),*
+        pub mod responses {
+            $($crate::make_response!(@inner
+                module: $module;
+                key: $path;
+                struct $name $(< $($lifetimes),* >)? {
+                    $($key: $val),*
+                }
+            );)*
+
+            pub struct Responses;
+            impl $crate::RegisterResponse for Responses {
+                fn register() -> anyhow::Result<()> {
+                    $($crate::templates::add_to_registry::<$name>()?;)*
+                    Ok(())
+                }
             }
-        );)*
+        }
     };
 
     (@inner
-        module: $module:expr;
-        key: $path:expr;
+        module: $module:literal;
+        key: $path:literal;
         struct $name:ident $(< $($lifetimes:lifetime),* >)? {
             $($key:ident: $val:ty),* $(,)?
         }
     ) => {
-            #[derive(Debug, Clone, Default, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
-            pub struct $name $(< $($lifetimes),* >)? {
+
+
+        #[derive(Debug, Clone, Default, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
+        pub struct $name $(< $($lifetimes),* >)? {
             $( pub $key: $val, )*
         }
 

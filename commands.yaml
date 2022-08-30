@@ -1,0 +1,28 @@
+builtin:
+  hello:
+    command: "!hello"
+    aliases:
+      - "!hi"
+    description: "sends a greeting"
+
+  ping:
+    command: "!ping"
+    args: <token?>
+    description: "determines the bot response time"
+
+  time:
+    command: "!time"
+    description: "gets the current time of the bot"
+
+  bot_uptime:
+    command: "!bot_uptime"
+    aliases:
+      - "!bot-uptime"
+      - "!bot uptime"
+    description: "gets the current uptime of the bot"
+
+  version:
+    command: "!version"
+    aliases:
+      - "!build"
+    description: "gets the current version of the bot"

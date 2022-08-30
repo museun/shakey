@@ -27,6 +27,77 @@ where
 {
 }
 
+pub trait FormatTime {
+    fn as_readable_time(&self) -> String;
+}
+
+impl FormatTime for time::Duration {
+    fn as_readable_time(&self) -> String {
+        format_seconds(self.as_seconds_f64() as _)
+    }
+}
+
+impl FormatTime for std::time::Duration {
+    fn as_readable_time(&self) -> String {
+        format_seconds(self.as_secs())
+    }
+}
+
+fn format_seconds(mut secs: u64) -> String {
+    const TABLE: [(&str, u64); 4] = [
+        ("days", 86400),
+        ("hours", 3600),
+        ("minutes", 60),
+        ("seconds", 1),
+    ];
+
+    fn pluralize(s: &str, n: u64) -> String {
+        format!("{} {}", n, if n > 1 { s } else { &s[..s.len() - 1] })
+    }
+
+    let mut time = vec![];
+    for (name, d) in &TABLE {
+        let div = secs / d;
+        if div > 0 {
+            time.push(pluralize(name, div));
+            secs -= d * div;
+        }
+    }
+
+    let len = time.len();
+    if len > 1 {
+        if len > 2 {
+            for segment in time.iter_mut().take(len - 2) {
+                segment.push(',')
+            }
+        }
+        time.insert(len - 1, "and".into())
+    }
+    time.join(" ")
+}
+
+pub trait WithCommas: Sized {
+    fn with_commas(self) -> String;
+}
+
+impl WithCommas for u64 {
+    fn with_commas(self) -> String {
+        use std::fmt::Write as _;
+        fn comma(n: u64, s: &mut String) {
+            if n < 1000 {
+                write!(s, "{}", n).unwrap();
+                return;
+            }
+            comma(n / 1000, s);
+            write!(s, ",{:03}", n % 1000).unwrap();
+        }
+
+        let mut buf = String::new();
+        comma(self, &mut buf);
+        buf
+    }
+}
+
 pub trait FutureExt: Future + Sized {
     fn select<F>(self, other: F) -> Select<Self, F>;
 }

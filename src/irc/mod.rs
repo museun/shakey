@@ -1,28 +1,32 @@
-use tokio::io::{AsyncWriteExt, BufStream};
+use tokio::io::BufStream;
 
 use crate::{
     ext::{Either, FutureExt},
     irc::{
         lower::Command,
-        proto::{connect, join, read_line, read_responses, wait_for_ready},
+        proto::{connect, join, read_line, read_responses, wait_for_ready, write_raw},
     },
     util::get_env_var,
-    Callable,
+    Callable, Response,
 };
 
 mod proto;
+pub use proto::errors;
 
 mod message;
-pub use self::message::Message;
+pub use self::message::{Message, Replier};
 
 mod lower;
 
-pub async fn run<const N: usize, const M: usize>(
-    mut handlers: [&mut (dyn for<'i> Callable<Message<'i>, Outcome = ()> + Send); N],
-    channels: [&str; M],
-) -> std::io::Result<()> {
+type BoxedCallable = Box<dyn Callable<Message<Box<dyn Response>>, Outcome = ()>>;
+
+pub async fn run<const N: usize>(mut handlers: [BoxedCallable; N]) -> anyhow::Result<()> {
+    let channels = get_env_var("SHAKEN_TWITCH_CHANNELS")?;
+    let channels = channels.split(',').collect::<Vec<_>>();
+    anyhow::ensure!(!channels.is_empty(), "channels cannot be empty");
+
     let stream = connect(
-        "irc.chat.twitch.tv:6667",
+        &get_env_var("SHAKEN_TWITCH_ADDRESS")?,
         &get_env_var("SHAKEN_TWITCH_NAME")?,
         &get_env_var("SHAKEN_TWITCH_OAUTH_TOKEN")?,
     )
@@ -32,9 +36,10 @@ pub async fn run<const N: usize, const M: usize>(
 
     let mut buf = String::with_capacity(1024);
     let identity = wait_for_ready(&mut buf, &mut stream).await?;
-    eprintln!(
+    log::info!(
         "connected, our identity: {} | id: {}",
-        identity.display_name, identity.user_id
+        identity.display_name,
+        identity.user_id
     );
 
     for channel in channels {
@@ -48,25 +53,24 @@ pub async fn run<const N: usize, const M: usize>(
             .select(write_rx.recv())
             .await
         {
-            Either::Left(msg) => {
-                if let msg @ Command::Privmsg { .. } = msg?.command {
+            Either::Left(Err(err)) => break Err(err),
+
+            Either::Left(Ok(msg)) => {
+                if let msg @ Command::Privmsg { .. } = msg.command {
                     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
-                    let msg = Message::new(&msg, tx);
+                    let msg = Message::new(msg, tx);
                     for handler in &mut handlers {
-                        eprintln!("dispatching");
                         // outcome is always () here
                         handler.call_func(&msg);
                     }
 
-                    tokio::spawn(read_responses(msg.as_owned(), rx, write_tx.clone()));
+                    tokio::spawn(read_responses(msg, rx, write_tx.clone()));
                 }
             }
 
             Either::Right(Some(data)) => {
-                eprintln!("?? {}", data.escape_debug());
-                stream.write_all(data.as_bytes()).await?;
-                stream.flush().await?;
+                write_raw(&data, &mut stream).await?;
             }
 
             _ => break Ok(()),
