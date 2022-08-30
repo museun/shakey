@@ -40,20 +40,32 @@ async fn main() -> anyhow::Result<()> {
     simple_env_load::load_env_from([".dev.env", ".secrets.env"]);
     alto_logger::init_term_logger()?;
 
+    let helix_client_id = get_env_var("SHAKEN_TWITCH_CLIENT_ID")?;
+    let helix_client_secret = get_env_var("SHAKEN_TWITCH_CLIENT_SECRET")?;
+
+    let helix_oauth = shakey::helix::OAuth::create(&helix_client_id, &helix_client_secret).await?;
+    let helix_client = shakey::helix::HelixClient::new(helix_oauth);
+
     loop {
         initialize_commands().await?;
         initialize_templates().await?;
 
         let builtin = builtin::Builtin::bind().await?.into_callable();
+        let twitch = twitch::Twitch::bind(helix_client.clone())
+            .await?
+            .into_callable();
 
         if let Err(err) = async move {
-            shakey::irc::run([builtin]).await?;
+            shakey::irc::run([
+                builtin, //
+                twitch,
+            ])
+            .await?;
             anyhow::Result::<_, anyhow::Error>::Ok(())
         }
         .await
         {
             log::warn!("disconnected");
-
             match () {
                 _ if err.is::<irc::errors::Connection>() => {}
                 _ if err.is::<irc::errors::Eof>() => {}
@@ -66,6 +78,108 @@ async fn main() -> anyhow::Result<()> {
 
             log::warn!("reconnecting in 5 seconds");
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    }
+}
+
+mod twitch {
+    use shakey::{
+        ext::FormatTime,
+        helix::{data::Stream, HelixClient},
+        irc::Message,
+        Arguments, Bind, Replier,
+    };
+    use time::OffsetDateTime;
+
+    shakey::make_response! {
+        module: "twitch"
+
+        struct Viewers {
+            name: String,
+            viewers: u64
+        } is "viewers"
+
+        struct Uptime {
+            name: String,
+            uptime: String,
+        } is "uptime"
+
+        struct NotStreaming {
+            channel: String,
+        } is "not_streaming"
+    }
+
+    pub struct Twitch {
+        client: HelixClient,
+    }
+
+    impl Twitch {
+        pub async fn bind<R: Replier + 'static>(
+            client: HelixClient,
+        ) -> anyhow::Result<Bind<Self, R>> {
+            Bind::create::<responses::Responses>(Self { client })?
+                .bind(Self::uptime)?
+                .bind(Self::viewers)
+        }
+
+        fn uptime(&mut self, msg: &Message<impl Replier>, args: Arguments) {
+            let msg = msg.clone();
+            let client = self.client.clone();
+
+            tokio::spawn(async move {
+                let Stream {
+                    user_name: name,
+                    started_at,
+                    ..
+                } = match Self::get_stream(&client, &msg, &args).await? {
+                    Some(stream) => stream,
+                    None => return anyhow::Result::<_, anyhow::Error>::Ok(()),
+                };
+
+                let uptime = (OffsetDateTime::now_utc() - started_at).as_readable_time();
+                msg.say(responses::Uptime { name, uptime });
+
+                anyhow::Result::Ok(())
+            });
+        }
+
+        fn viewers(&mut self, msg: &Message<impl Replier>, args: Arguments) {
+            let msg = msg.clone();
+            let client = self.client.clone();
+
+            tokio::spawn(async move {
+                let Stream {
+                    user_name: name,
+                    viewer_count: viewers,
+                    ..
+                } = match Self::get_stream(&client, &msg, &args).await? {
+                    Some(stream) => stream,
+                    None => return anyhow::Result::<_, anyhow::Error>::Ok(()),
+                };
+
+                msg.say(responses::Viewers { name, viewers });
+
+                anyhow::Result::Ok(())
+            });
+        }
+
+        async fn get_stream(
+            client: &HelixClient,
+            msg: &Message<impl Replier>,
+            args: &Arguments,
+        ) -> anyhow::Result<Option<Stream>> {
+            let channel = args.get("channel").unwrap_or_else(|| &msg.target);
+            let channel = channel.strip_prefix('#').unwrap_or(channel);
+
+            if let Some(stream) = client.get_streams([channel]).await?.pop() {
+                return Ok(Some(stream));
+            }
+
+            msg.problem(responses::NotStreaming {
+                channel: channel.to_string(),
+            });
+
+            Ok(None)
         }
     }
 }

@@ -40,4 +40,12 @@ pub fn bind_system_errors() -> anyhow::Result<()> {
     responses::Responses::register()
 }
 
+pub mod helix;
+
 include!(concat!(env!("OUT_DIR"), "/", "version.rs"));
+
+pub const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+
+mod serde;
+
+pub mod config;

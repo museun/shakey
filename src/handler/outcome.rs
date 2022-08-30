@@ -1,3 +1,5 @@
+// TODO this should also work with tokio::task::JoinHandle<impl Outcome>
+
 pub trait Outcome: Sized {
     fn into_error(self) -> Option<String> {
         None

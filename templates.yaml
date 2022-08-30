@@ -19,3 +19,11 @@ builtin:
     default: "${revision} on branch `${branch}` built at: ${build_time}"
   say_hello:
     default: "${greeting}, ${sender}."
+
+twitch:
+  viewers:
+    default: "${name} has ${viewers} viewers"
+  uptime:
+    default: "${name} has been live for: ${uptime}"
+  not_streaming:
+    default: "I don't think ${channel} is streaming"

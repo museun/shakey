@@ -26,3 +26,14 @@ builtin:
     aliases:
       - "!build"
     description: "gets the current version of the bot"
+
+twitch:
+  uptime:
+    command: "!uptime"
+    args: "<channel?>"
+    description: "gets a twitch channels uptime"
+
+  viewers:
+    command: "!viewers"
+    args: "<channel?>"
+    description: "gets the number of a viewers for a twitch channel"
