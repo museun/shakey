@@ -7,7 +7,7 @@ builtin:
 
   ping:
     command: "!ping"
-    args: <token?>
+    args: <token..>
     description: "determines the bot response time"
 
   time:
