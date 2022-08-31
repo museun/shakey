@@ -10,6 +10,12 @@ pub struct Arguments {
 }
 
 impl Arguments {
+    pub fn take(&mut self, key: &str) -> String {
+        self.map
+            .remove(key)
+            .unwrap_or_else(|| panic!("{key} should exist"))
+    }
+
     pub fn get(&self, key: &str) -> Option<&str> {
         self.map.get(key).map(|s| &**s)
     }

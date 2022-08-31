@@ -11,7 +11,36 @@ use super::{
     message::Message,
 };
 
-pub mod errors;
+pub fn map_io_err<T>(err: Result<T, std::io::Error>) -> anyhow::Result<T> {
+    use std::io::ErrorKind::*;
+    err.map_err(|err| match err.kind() {
+        UnexpectedEof => Eof.into(),
+        ConnectionRefused | ConnectionReset | ConnectionAborted => Connection.into(),
+        TimedOut => Timeout.into(),
+        _ => err.into(),
+    })
+}
+
+macro_rules! make_error {
+    ($($ident:ident)*) => {
+        $(
+            #[derive(Debug)]
+            pub struct $ident;
+            impl std::fmt::Display for $ident {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    std::fmt::Debug::fmt(self, f)
+                }
+            }
+            impl std::error::Error for $ident {}
+        )*
+    };
+}
+
+make_error! {
+    Eof
+    Timeout
+    Connection
+}
 
 #[derive(Debug)]
 pub struct Identity {
@@ -39,19 +68,31 @@ pub async fn read_responses<R>(
         };
 
         let Message { sender, target, .. } = &msg;
+
+        fn format_lines(left: String, right: &str) -> Vec<String> {
+            right
+                .lines()
+                .map(|right| format!("{left}{right}\r\n"))
+                .collect()
+        }
+
         let data = match resp {
-            Reply::Say(resp) | Reply::Problem(resp) => format!("PRIVMSG {target} :{resp}\r\n"),
-            Reply::Reply(resp) => format!("PRIVMSG {target} :{sender}: {resp}\r\n"),
+            Reply::Say(resp) => format_lines(format!("PRIVMSG {target} :"), &resp),
+            Reply::Reply(resp) | Reply::Problem(resp) => {
+                format_lines(format!("PRIVMSG {target} :{sender}: "), &resp)
+            }
         };
 
-        if out.send(data).await.is_err() {
-            break;
+        for line in data {
+            if out.send(line).await.is_err() {
+                break;
+            }
         }
     }
 }
 
 pub async fn connect(addr: &str, name: &str, oauth: &str) -> anyhow::Result<TcpStream> {
-    let mut stream = errors::map_io_err(TcpStream::connect(addr).await)?;
+    let mut stream = map_io_err(TcpStream::connect(addr).await)?;
     for cap in [
         "CAP REQ :twitch.tv/membership\r\n",
         "CAP REQ :twitch.tv/tags\r\n",
@@ -59,9 +100,9 @@ pub async fn connect(addr: &str, name: &str, oauth: &str) -> anyhow::Result<TcpS
         &format!("PASS {oauth}\r\n"),
         &format!("NICK {name}\r\n"),
     ] {
-        errors::map_io_err(stream.write_all(cap.as_bytes()).await)?;
+        map_io_err(stream.write_all(cap.as_bytes()).await)?;
     }
-    errors::map_io_err(stream.flush().await)?;
+    map_io_err(stream.flush().await)?;
 
     Ok(stream)
 }
@@ -79,8 +120,8 @@ where
     A: AsyncWrite + Unpin + Send + Sized,
 {
     log::trace!("-> {}", data.escape_debug());
-    errors::map_io_err(conn.write_all(data.as_bytes()).await)?;
-    errors::map_io_err(conn.flush().await)
+    map_io_err(conn.write_all(data.as_bytes()).await)?;
+    map_io_err(conn.flush().await)
 }
 
 pub async fn wait_for_ready<A>(buf: &mut String, mut conn: A) -> anyhow::Result<Identity>
@@ -109,8 +150,8 @@ where
     A: AsyncBufRead + AsyncWrite + Unpin + Send + Sized,
 {
     buf.clear();
-    let buf = match errors::map_io_err(conn.read_line(buf).await)? {
-        0 => return Err(errors::Eof.into()),
+    let buf = match map_io_err(conn.read_line(buf).await)? {
+        0 => return Err(Eof.into()),
         n => &buf[..n],
     };
     log::trace!("<- {}", buf.escape_debug());
@@ -121,8 +162,8 @@ where
     match line.command {
         Command::Ping { token } => {
             let data = format!("PONG {token}\r\n");
-            errors::map_io_err(conn.write_all(data.as_bytes()).await)?;
-            errors::map_io_err(conn.flush().await)?
+            map_io_err(conn.write_all(data.as_bytes()).await)?;
+            map_io_err(conn.flush().await)?
         }
         Command::Error { error } => anyhow::bail!("Twitch error: {error}"),
         _ => {}

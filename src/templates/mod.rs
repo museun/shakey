@@ -5,6 +5,8 @@ use std::{
     time::Duration,
 };
 
+mod macros;
+
 mod variant;
 pub use variant::Variant;
 

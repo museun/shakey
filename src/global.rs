@@ -29,6 +29,7 @@ impl<'a, T> Global<'a, T> {
 pub fn templates() -> Arc<Templates> {
     GLOBAL_TEMPLATES.get()
 }
+
 pub fn commands() -> Arc<Commands> {
     GLOBAL_COMMANDS.get()
 }

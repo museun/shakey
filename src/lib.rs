@@ -1,6 +1,6 @@
 pub mod handler;
 pub use handler::{
-    Arguments, Bind, Callable, Commands, ExampleArgs, Outcome, Replier, Reply, Response,
+    Arguments, Bind, Callable, Commands, MaybeTask, Outcome, Replier, Reply, Response,
 };
 
 #[macro_use]
@@ -33,6 +33,9 @@ crate::make_response! {
     struct InvalidUsage {
         usage: String,
     } is "invalid_usage"
+
+    struct RequiresPermission {
+    } is "requires_permission"
 }
 
 pub fn bind_system_errors() -> anyhow::Result<()> {

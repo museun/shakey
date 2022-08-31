@@ -18,6 +18,19 @@ where
             a
         })
     }
+
+    fn join_multiline_max(self, max: usize) -> String {
+        self.enumerate().fold(String::new(), |mut a, (i, c)| {
+            if i > 0 && i % max == 0 {
+                a.push('\n')
+            }
+            if !a.is_empty() {
+                a.push(' ')
+            }
+            a.push_str(c.as_ref());
+            a
+        })
+    }
 }
 
 impl<I> IterExt for I

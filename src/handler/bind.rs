@@ -8,13 +8,9 @@ use std::{
 use anyhow::Context;
 use heck::ToSnekCase;
 
-use crate::{
-    global,
-    irc::{self, Replier},
-    responses, Arguments, Callable, ExampleArgs, Outcome, RegisterResponse,
-};
+use crate::{global, irc, responses, Arguments, Callable, Outcome, RegisterResponse, Replier};
 
-use super::arguments::Match;
+use super::arguments::{ExampleArgs, Match};
 
 type BoxedHandler<R> = Box<dyn Fn(&irc::Message<R>) + Send + Sync>;
 
@@ -70,11 +66,32 @@ where
         let this = move |msg: &irc::Message<R>| {
             let commands = global::commands();
             let cmd = commands.find(&module, &key).expect("command should exist");
-            if let Some(map) = Self::parse_command(cmd, msg) {
-                let this = &mut *this.lock();
-                if let Some(error) = handler(this, msg, map).into_error() {
+
+            let map = match Self::parse_command(cmd, msg) {
+                Some(map) => map,
+                None => return,
+            };
+
+            let this = &mut *this.lock();
+            let outcome = handler(this, msg, map);
+
+            if outcome.is_error() {
+                if let Some(error) = outcome.into_error() {
                     msg.problem(responses::Error { error })
                 }
+                return;
+            }
+
+            if let Some(task) = outcome.into_task() {
+                let msg = msg.clone();
+                let fut = async move {
+                    if let Ok(Err(err)) = task.await {
+                        msg.problem(responses::Error {
+                            error: err.to_string(),
+                        })
+                    }
+                };
+                tokio::spawn(fut);
             }
         };
 
@@ -108,7 +125,7 @@ where
             return Some(Arguments::default());
         }
 
-        let tail = cmd.without_command(&msg.data)?;
+        let tail = cmd.without_command(&msg.data)?.unwrap_or_default();
         match cmd.args.extract(tail.trim()) {
             Match::Match(map) => Some(Arguments { map }),
             Match::NoMatch => None,
@@ -155,14 +172,19 @@ impl Command {
             .any(|c| c == query)
     }
 
-    pub fn without_command<'a>(&'a self, query: &'a str) -> Option<&str> {
-        let shortest = std::iter::once(&*self.command)
-            .chain(self.aliases.iter().map(|s| &**s))
-            .find(|s| query.starts_with(s))?;
-        Some(&query[std::cmp::min(shortest.len(), query.len())..])
+    pub fn without_command<'a>(&'a self, query: &'a str) -> Option<Option<&str>> {
+        // this breaks if the command has a space in it
+        let mut iter = query.splitn(2, ' ');
+        let head = iter.next()?;
+
+        if !self.is_command_match(head) {
+            return None;
+        }
+
+        Some(iter.next())
     }
 
-    pub fn has_args(&self) -> bool {
+    pub const fn has_args(&self) -> bool {
         !self.args.args.is_empty()
     }
 }
@@ -183,6 +205,26 @@ impl Commands {
     pub async fn load_from_yaml(path: impl AsRef<Path> + Send) -> anyhow::Result<Self> {
         let data = tokio::fs::read_to_string(path).await?;
         serde_yaml::from_str(&data).map_err(Into::into)
+    }
+
+    pub fn find_by_name(&self, query: &str) -> Option<&Command> {
+        self.modules
+            .values()
+            .filter_map(|module| {
+                module
+                    .entries
+                    .values()
+                    .find(|cmd| cmd.command == query || cmd.aliases.contains(query))
+            })
+            .next()
+    }
+
+    pub fn command_names(&self) -> impl Iterator<Item = &str> {
+        self.modules.values().flat_map(|module| {
+            module.entries.values().flat_map(|cmd| {
+                std::iter::once(&*cmd.command).chain(cmd.aliases.iter().map(|c| &**c))
+            })
+        })
     }
 
     pub fn find(&self, module: &str, key: &str) -> Option<&Command> {

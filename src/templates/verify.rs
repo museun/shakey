@@ -45,12 +45,6 @@ where
         .into_iter()
         .collect::<BTreeSet<_>>();
 
-    anyhow::ensure!(
-        !fields.is_empty(),
-        "an empty struct was provided for: {}",
-        &response as &dyn Response
-    );
-
     let templates = templates();
 
     anyhow::ensure!(

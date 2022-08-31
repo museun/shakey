@@ -1,49 +1,9 @@
 use serde::Serialize;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::{handler::Reply, Response};
+use crate::{handler::Reply, Replier, Response};
 
 use super::lower::Command;
-
-pub trait Replier: Send + Sync + Sized + 'static {
-    fn say(item: impl Serialize + Response + 'static) -> Reply<Self>;
-    fn reply(item: impl Serialize + Response + 'static) -> Reply<Self>;
-    fn problem(item: impl Serialize + Response + 'static) -> Reply<Self>;
-}
-
-impl Replier for Box<dyn Response> {
-    fn say(item: impl Serialize + Response + 'static) -> Reply<Self> {
-        Reply::Say(Box::new(item) as _)
-    }
-
-    fn reply(item: impl Serialize + Response + 'static) -> Reply<Self> {
-        Reply::Reply(Box::new(item) as _)
-    }
-
-    fn problem(item: impl Serialize + Response + 'static) -> Reply<Self> {
-        Reply::Problem(Box::new(item) as _)
-    }
-}
-
-fn erase(item: impl Serialize + Response + 'static) -> Box<[u8]> {
-    let d = serde_yaml::to_string(&item).expect("valid yaml");
-    let d = Vec::from(d);
-    d.into()
-}
-
-impl Replier for Box<[u8]> {
-    fn say(item: impl Serialize + Response + 'static) -> Reply<Self> {
-        Reply::Say(erase(item))
-    }
-
-    fn reply(item: impl Serialize + Response + 'static) -> Reply<Self> {
-        Reply::Reply(erase(item))
-    }
-
-    fn problem(item: impl Serialize + Response + 'static) -> Reply<Self> {
-        Reply::Problem(erase(item))
-    }
-}
 
 pub struct Message<R>
 where
@@ -106,7 +66,31 @@ where
         let _ = self.reply.send(item);
     }
 
-    pub(crate) fn new(command: Command<'_>, reply: UnboundedSender<Reply<R>>) -> Message<R> {
+    pub fn is_from_broadcaster(&self) -> bool {
+        self.badges_iter()
+            .any(|(k, v)| k == "broadcaster" && v == "1")
+    }
+
+    pub fn is_from_moderator(&self) -> bool {
+        self.badges_iter()
+            .any(|(k, v)| k == "moderator" && v == "1")
+    }
+
+    pub fn is_from_elevated(&self) -> bool {
+        self.is_from_broadcaster() || self.is_from_moderator()
+    }
+
+    fn badges_iter<'a>(&'a self) -> impl Iterator<Item = (&'a str, &'a str)> + 'a {
+        self.tags.iter().flat_map(|tags| {
+            tags.split(';')
+                .flat_map(|val| val.split_once('='))
+                .filter_map(|(k, v)| (k == "badges").then_some(v))
+                .flat_map(|v| v.split(','))
+                .flat_map(|v| v.split_once('/'))
+        })
+    }
+
+    pub(crate) fn new(command: Command<'_>, reply: UnboundedSender<Reply<R>>) -> Self {
         assert!(matches!(command, Command::Privmsg { .. }));
 
         if let Command::Privmsg {

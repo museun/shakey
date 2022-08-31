@@ -11,10 +11,12 @@ use crate::{
 };
 
 mod proto;
-pub use proto::errors;
+pub mod errors {
+    pub use super::proto::{Connection, Eof, Timeout};
+}
 
 mod message;
-pub use self::message::{Message, Replier};
+pub use message::Message;
 
 mod lower;
 
@@ -43,6 +45,7 @@ pub async fn run<const N: usize>(mut handlers: [BoxedCallable; N]) -> anyhow::Re
     );
 
     for channel in channels {
+        log::info!("joining: {channel}");
         join(channel, &mut stream).await?;
     }
 
@@ -60,6 +63,8 @@ pub async fn run<const N: usize>(mut handlers: [BoxedCallable; N]) -> anyhow::Re
                     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
 
                     let msg = Message::new(msg, tx);
+                    log::debug!("[{}] {}: {}", msg.target, msg.sender, msg.data.trim());
+
                     for handler in &mut handlers {
                         // outcome is always () here
                         handler.call_func(&msg);

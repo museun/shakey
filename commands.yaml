@@ -18,7 +18,6 @@ builtin:
     command: "!bot_uptime"
     aliases:
       - "!bot-uptime"
-      - "!bot uptime"
     description: "gets the current uptime of the bot"
 
   version:
@@ -37,3 +36,55 @@ twitch:
     command: "!viewers"
     args: "<channel?>"
     description: "gets the number of a viewers for a twitch channel"
+
+spotify:
+  current_song:
+    command: "!song"
+    aliases:
+      - "!current"
+    description: "tries to get the currently playing song from Spotify"
+
+  previous_song:
+    command: "!previous"
+    aliases:
+      - "!last"
+    description: "tries to get the previously playing song from Spotify"
+
+crates:
+  lookup_crate:
+    command: "!crate"
+    args: "<crate>"
+    aliases:
+      - "!lookup"
+    description: "tries to look up a crate on crates.io"
+
+vscode:
+  theme:
+    command: "!theme"
+    description: "tries to get the streamer's VsCode theme"
+  fonts:
+    command: "!fonts"
+    description: "tries to get the streamer's VsCode fonts"
+
+help:
+  help:
+    command: "!help"
+    args: "<command?>"
+    description: "lists all commands, or gets help for a specific command"
+
+user_defined:
+  add:
+    command: "!add"
+    args: "<command> <body..>"
+    description: "add a new command with a body"
+  update:
+    command: "!update"
+    args: "<command> <body..>"
+    description: "updates a command with a new body"
+  remove:
+    command: "!remove"
+    args: "<command>"
+    description: "remove a command"
+  commands:
+    command: "!commands"
+    description: "gets all of the user-defined commands"

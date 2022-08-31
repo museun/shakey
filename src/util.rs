@@ -9,7 +9,7 @@ pub async fn watch_file<Fut>(
     path: impl Into<PathBuf> + Send,
     sleep: Duration,
     modification: Duration,
-    update: impl FnOnce(PathBuf) -> Fut + Clone,
+    update: impl FnOnce(PathBuf) -> Fut + Clone + Sync + Send,
 ) -> anyhow::Result<()>
 where
     Fut: Future<Output = anyhow::Result<()>> + Send,

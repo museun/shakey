@@ -1,5 +1,5 @@
 mod outcome;
-pub use outcome::Outcome;
+pub use outcome::{MaybeTask, Outcome};
 
 mod callable;
 pub use callable::Callable;
@@ -14,7 +14,7 @@ mod reply;
 pub use reply::Reply;
 
 mod arguments;
-pub use arguments::{Arguments, ExampleArgs};
+pub use arguments::Arguments;
 
-// why is this in that module?
-pub use crate::irc::Replier;
+mod replier;
+pub use replier::Replier;
