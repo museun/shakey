@@ -52,3 +52,5 @@ pub const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PK
 mod serde;
 
 pub mod config;
+
+pub mod modules;
