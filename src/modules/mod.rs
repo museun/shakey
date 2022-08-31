@@ -18,3 +18,6 @@ pub use help::Help;
 
 mod user_defined;
 pub use user_defined::UserDefined;
+
+mod another_viewer;
+pub use another_viewer::AnotherViewer;

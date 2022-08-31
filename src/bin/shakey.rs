@@ -93,6 +93,7 @@ async fn bind_modules<R: Replier>(components: Components) -> anyhow::Result<Vec<
         .add(Vscode::bind).await?
         .add(Help::bind).await?
         .add(UserDefined::bind).await?
+        .add(AnotherViewer::bind).await?
         .into_list())
 }
 

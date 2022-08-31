@@ -21,7 +21,7 @@ pub use arguments::Arguments;
 mod replier;
 pub use replier::Replier;
 
-use crate::Config;
+use crate::{helix::EmoteMap, Config};
 
 #[derive(Clone)]
 pub struct Components {
@@ -29,6 +29,7 @@ pub struct Components {
     pub spotify_client: crate::modules::SpotifyClient,
     pub github_oauth: Arc<crate::modules::GithubOAuth>,
     pub gist_id: Arc<str>,
+    pub emote_map: Arc<EmoteMap>,
 }
 
 impl Components {
@@ -42,6 +43,10 @@ impl Components {
         )
         .await?;
         let helix_client = HelixClient::new(helix_oauth);
+
+        let (_, emote_map) = helix_client.get_global_emotes().await?;
+        let emote_map = EmoteMap::default()
+            .with_emotes(emote_map.iter().map(|emote| (&*emote.name, &*emote.id)));
 
         let spotify_client = SpotifyClient::new(
             &config.spotify_client_id, //
@@ -59,6 +64,7 @@ impl Components {
             spotify_client,
             github_oauth,
             gist_id,
+            emote_map: Arc::new(emote_map),
         })
     }
 }
