@@ -59,12 +59,17 @@ pub async fn run<const N: usize>(mut handlers: [BoxedCallable; N]) -> anyhow::Re
             Either::Left(Err(err)) => break Err(err),
 
             Either::Left(Ok(msg)) => {
-                if let msg @ Command::Privmsg { .. } = msg.command {
+                if let msg @ Command::Privmsg {
+                    ref sender,
+                    ref target,
+                    ref data,
+                    ..
+                } = msg.command
+                {
                     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+                    log::debug!("[{}] {}: {}", target, sender, data);
 
                     let msg = Message::new(msg, tx);
-                    log::debug!("[{}] {}: {}", msg.target, msg.sender, msg.data.trim());
-
                     for handler in &mut handlers {
                         // outcome is always () here
                         handler.call_func(&msg);

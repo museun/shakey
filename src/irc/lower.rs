@@ -7,7 +7,7 @@ pub struct Line<'a> {
     pub command: Command<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum Command<'a> {
     Ping {
         token: &'a str,

@@ -1036,11 +1036,8 @@ mod user_defined {
     use std::collections::HashMap;
 
     use shakey::{
-        data::{Interest, Save, SaveFile},
-        ext::IterExt,
-        irc::Message,
-        responses::RequiresPermission,
-        Arguments, Bind, MaybeTask, Outcome, Replier,
+        data::Interest, ext::IterExt, irc::Message, responses::RequiresPermission, Arguments, Bind,
+        Outcome, Replier,
     };
 
     shakey::make_response! {
@@ -1143,12 +1140,12 @@ mod user_defined {
     }
 
     pub struct UserDefined {
-        commands: SaveFile<Commands>,
+        commands: Commands,
     }
 
     impl UserDefined {
         pub async fn bind<R: Replier>() -> anyhow::Result<Bind<Self, R>> {
-            let commands = Commands::saveable().await?;
+            let commands = shakey::data::load_yaml().await?;
             Bind::create::<responses::Responses>(Self { commands })?
                 .bind(Self::add)?
                 .bind(Self::update)?
@@ -1162,128 +1159,111 @@ mod user_defined {
         fn add(&mut self, msg: &Message<impl Replier>, mut args: Arguments) -> impl Outcome {
             if !msg.is_from_elevated() {
                 msg.problem(RequiresPermission {});
-                return MaybeTask::Nope;
+                return;
             }
 
             if !Self::check_body(msg, &args) {
-                return MaybeTask::Nope;
+                return;
             }
 
             if !args["command"].starts_with('!') {
                 msg.problem(responses::InvalidSyntax {
                     error: "commands must start with !",
                 });
-                return MaybeTask::Nope;
+                return;
             }
 
             let cmd = args.take("command");
             let body = args.take("body");
-            let commands = self.commands.clone();
-            let msg = msg.clone();
 
-            MaybeTask::Task(tokio::spawn(async move {
-                if !commands.get_mut().await.add(&cmd, &body) {
-                    msg.problem(responses::CommandExists { command: cmd });
-                    return Ok(());
-                }
-                msg.reply(responses::Added { command: cmd, body });
-                commands.save().await
-            }))
+            if !self.commands.add(&cmd, &body) {
+                msg.problem(responses::CommandExists { command: cmd });
+                return;
+            }
+
+            msg.reply(responses::Added { command: cmd, body });
+
+            self.save();
         }
 
         fn update(&mut self, msg: &Message<impl Replier>, mut args: Arguments) -> impl Outcome {
             if !msg.is_from_elevated() {
                 msg.problem(RequiresPermission {});
-                return MaybeTask::Nope;
+                return;
             }
 
             if !Self::check_body(msg, &args) {
-                return MaybeTask::Nope;
+                return;
             }
 
             if !args["command"].starts_with('!') {
                 msg.problem(responses::InvalidSyntax {
                     error: "commands must start with !",
                 });
-                return MaybeTask::Nope;
+                return;
             }
 
             let cmd = args.take("command");
             let body = args.take("body");
-            let commands = self.commands.clone();
-            let msg = msg.clone();
 
-            MaybeTask::Task(tokio::spawn(async move {
-                if !commands.get_mut().await.update(&cmd, &body) {
-                    msg.problem(responses::CommandNotFound { command: cmd });
-                    return Ok(());
-                }
-                msg.reply(responses::Updated { command: cmd, body });
-                commands.save().await
-            }))
+            if !self.commands.update(&cmd, &body) {
+                msg.problem(responses::CommandNotFound { command: cmd });
+                return;
+            }
+
+            msg.reply(responses::Updated { command: cmd, body });
+
+            self.save();
         }
 
         fn remove(&mut self, msg: &Message<impl Replier>, mut args: Arguments) -> impl Outcome {
             if !msg.is_from_elevated() {
                 msg.problem(RequiresPermission {});
-                return MaybeTask::Nope;
+                return;
             }
 
             if !args["command"].starts_with('!') {
                 msg.problem(responses::InvalidSyntax {
                     error: "commands must start with !",
                 });
-                return MaybeTask::Nope;
+                return;
             }
 
             let cmd = args.take("command");
-            let commands = self.commands.clone();
-            let msg = msg.clone();
-
-            MaybeTask::Task(tokio::spawn(async move {
-                if let Some(command) = commands.get_mut().await.remove(&cmd) {
-                    msg.reply(responses::Removed {
-                        command: cmd,
-                        body: command.body,
-                    });
-                    return commands.save().await;
-                }
-                msg.problem(responses::CommandNotFound {
-                    command: cmd.to_string(),
+            if let Some(command) = self.commands.remove(&cmd) {
+                msg.reply(responses::Removed {
+                    command: cmd,
+                    body: command.body,
                 });
-                Ok(())
-            }))
+                return self.save();
+            }
+
+            msg.problem(responses::CommandNotFound {
+                command: cmd.to_string(),
+            });
         }
 
         fn commands(&mut self, msg: &Message<impl Replier>, args: Arguments) -> impl Outcome {
             const MAX_PER_LINE: usize = 10;
-
-            let msg = msg.clone();
-            let commands = self.commands.clone();
-            tokio::spawn(async move {
-                let commands = commands
-                    .get()
-                    .await
-                    .get_all_names()
-                    .join_multiline_max(MAX_PER_LINE);
-                msg.reply(responses::Commands { commands })
-            })
+            let commands = self
+                .commands
+                .get_all_names()
+                .join_multiline_max(MAX_PER_LINE);
+            msg.reply(responses::Commands { commands })
         }
 
         fn listen(&mut self, msg: &Message<impl Replier>) -> impl Outcome {
-            let msg = msg.clone();
-            let commands = self.commands.clone();
-            tokio::spawn(async move {
-                if let Some(cmd) = commands.get_mut().await.find(&msg.data) {
-                    msg.reply(responses::Command {
-                        body: cmd.body.clone(),
-                    });
-                } else {
-                    return Ok(());
-                }
+            if let Some(cmd) = self.commands.find(&msg.data) {
+                msg.reply(responses::Command {
+                    body: cmd.body.clone(),
+                });
+                self.save()
+            }
+        }
 
-                commands.save().await
-            })
+        fn save(&self) {
+            let commands = self.commands.clone();
+            tokio::task::spawn(async move { shakey::data::save_yaml(&commands).await });
         }
 
         fn check_body(msg: &Message<impl Replier>, args: &Arguments) -> bool {
