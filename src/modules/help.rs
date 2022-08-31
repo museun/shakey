@@ -1,4 +1,4 @@
-use crate::{ext::IterExt, irc::Message, Arguments, Bind, Replier};
+use crate::{ext::IterExt, global::GlobalItem, irc::Message, Arguments, Bind, Commands, Replier};
 
 // TODO get rid of this type
 #[derive(
@@ -63,7 +63,7 @@ impl Help {
     fn help(&mut self, msg: &Message<impl Replier>, args: Arguments) {
         const MAX_PER_LINE: usize = 10;
 
-        let commands = crate::global::commands();
+        let commands = Commands::get();
         match args.get("command") {
             Some(cmd) => match commands.find_by_name(cmd) {
                 Some(cmd) => {

@@ -80,7 +80,7 @@ where
         self.is_from_broadcaster() || self.is_from_moderator()
     }
 
-    fn badges_iter<'a>(&'a self) -> impl Iterator<Item = (&'a str, &'a str)> + 'a {
+    fn badges_iter(&self) -> impl Iterator<Item = (&'_ str, &'_ str)> + '_ {
         self.tags.iter().flat_map(|tags| {
             tags.split(';')
                 .flat_map(|val| val.split_once('='))

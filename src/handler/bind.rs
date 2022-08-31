@@ -1,14 +1,15 @@
 use std::{
     collections::{BTreeSet, HashMap},
-    path::{Path, PathBuf},
     sync::Arc,
-    time::Duration,
 };
 
 use anyhow::Context;
 use heck::ToSnekCase;
 
-use crate::{global, irc, responses, Arguments, Callable, Outcome, RegisterResponse, Replier};
+use crate::{
+    data::Interest, global::GlobalItem, irc, responses, Arguments, Callable, Outcome,
+    RegisterResponse, Replier,
+};
 
 use super::arguments::{ExampleArgs, Match};
 
@@ -57,15 +58,15 @@ where
         F: Copy + 'static,
     {
         let (module, key) = Self::make_keyable::<F>();
-        global::commands()
+        Commands::get()
             .find(&module, &key)
             .with_context(|| anyhow::anyhow!("cannot find {module}.{key}"))?;
         log::debug!("adding handler: {module}.{key}");
 
         let this = Arc::clone(&self.this);
         let this = move |msg: &irc::Message<R>| {
-            let commands = global::commands();
-            let cmd = commands.find(&module, &key).expect("command should exist");
+            let cmd = Commands::get();
+            let cmd = cmd.find(&module, &key).expect("command should exist");
 
             let map = match Self::parse_command(cmd, msg) {
                 Some(map) => map,
@@ -201,12 +202,17 @@ pub struct Commands {
     modules: HashMap<String, Module>,
 }
 
-impl Commands {
-    pub async fn load_from_yaml(path: impl AsRef<Path> + Send) -> anyhow::Result<Self> {
-        let data = tokio::fs::read_to_string(path).await?;
-        serde_yaml::from_str(&data).map_err(Into::into)
+impl Interest for Commands {
+    fn module() -> &'static str {
+        "shakey"
     }
 
+    fn file() -> &'static str {
+        "commands.yaml"
+    }
+}
+
+impl Commands {
     pub fn find_by_name(&self, query: &str) -> Option<&Command> {
         self.modules
             .values()
@@ -229,23 +235,5 @@ impl Commands {
 
     pub fn find(&self, module: &str, key: &str) -> Option<&Command> {
         self.modules.get(module)?.entries.get(key)
-    }
-
-    pub async fn watch_for_updates(path: impl Into<PathBuf> + Send) -> anyhow::Result<()> {
-        crate::util::watch_file(
-            path,
-            Duration::from_secs(1),
-            Duration::from_millis(1),
-            Self::reload_templates,
-        )
-        .await
-    }
-
-    async fn reload_templates(path: PathBuf) -> anyhow::Result<()> {
-        let this = Self::load_from_yaml(path).await.map(Arc::new)?;
-        // TODO verify the new this
-
-        global::GLOBAL_COMMANDS.update(this);
-        Ok(())
     }
 }

@@ -11,8 +11,38 @@ static TEMPLATES: OnceCell<RwLock<Arc<Templates>>> = OnceCell::new();
 pub static GLOBAL_COMMANDS: Global<'static, Commands> = Global(&COMMANDS);
 pub static GLOBAL_TEMPLATES: Global<'static, Templates> = Global(&TEMPLATES);
 
+pub trait GlobalItem: Sized + Send + Sync + 'static {
+    fn get() -> Arc<Self> {
+        Self::get_static().get()
+    }
+    fn get_static() -> &'static Global<'static, Self>;
+}
+
+impl GlobalItem for Commands {
+    fn get_static() -> &'static Global<'static, Self> {
+        &GLOBAL_COMMANDS
+    }
+}
+
+impl GlobalItem for Templates {
+    fn get_static() -> &'static Global<'static, Self> {
+        &GLOBAL_TEMPLATES
+    }
+}
+
+#[derive(Copy, Clone)]
 pub struct Global<'a, T>(pub(crate) &'a OnceCell<RwLock<Arc<T>>>);
+
 impl<'a, T> Global<'a, T> {
+    pub fn reset(&'static self)
+    where
+        T: Default,
+    {
+        if let Some(item) = self.0.get() {
+            *item.write() = <Arc<T>>::default();
+        }
+    }
+
     pub fn initialize(&'static self, item: Arc<T>) -> &'static RwLock<Arc<T>> {
         self.0.get_or_init(move || RwLock::new(item))
     }
@@ -24,12 +54,4 @@ impl<'a, T> Global<'a, T> {
     pub fn get(&'static self) -> Arc<T> {
         self.0.get().expect("initialization").read().clone()
     }
-}
-
-pub fn templates() -> Arc<Templates> {
-    GLOBAL_TEMPLATES.get()
-}
-
-pub fn commands() -> Arc<Commands> {
-    GLOBAL_COMMANDS.get()
 }

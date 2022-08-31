@@ -110,12 +110,20 @@ where
 }
 
 fn initialize_global_state() {
-    let templates = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", "templates.yaml"));
+    let templates = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/data/shakey/",
+        "templates.yaml"
+    ));
     let templates = serde_yaml::from_str(templates).map(Arc::new).unwrap();
     GLOBAL_TEMPLATES.initialize(templates);
     crate::bind_system_errors().unwrap();
 
-    let commands = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", "commands.yaml"));
+    let commands = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/data/shakey/",
+        "commands.yaml"
+    ));
     let commands = serde_yaml::from_str(commands).map(Arc::new).unwrap();
     GLOBAL_TEMPLATES.initialize(commands);
 }

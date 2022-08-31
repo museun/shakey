@@ -1,18 +1,45 @@
 #![cfg_attr(debug_assertions, allow(dead_code, unused_variables,))]
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
-use shakey::{get_env_var, irc, Commands, Templates};
+use shakey::{
+    data::Interest,
+    get_env_var,
+    global::{Global, GlobalItem},
+    helix::HelixClient,
+    irc,
+    modules::{GithubOAuth, SpotifyClient},
+    Callable, Commands, Replier, Templates,
+};
 
-async fn initialize_templates() -> anyhow::Result<()> {
-    let path = get_env_var("SHAKEN_TEMPLATES_PATH")?;
-    let templates = Templates::load_from_yaml(&path).await.map(Arc::new)?;
-    shakey::global::GLOBAL_TEMPLATES.initialize(templates);
-    shakey::bind_system_errors()?;
+async fn initialize<T>() -> anyhow::Result<()>
+where
+    T: Default + Send + Sync + 'static,
+    T: Interest + for<'de> serde::Deserialize<'de>,
+    Global<'static, T>:,
+    T: GlobalItem,
+{
+    let path = shakey::data::get_data_path::<T>()?;
+    let this = shakey::data::load_yaml().await?;
+
+    T::get_static().reset();
+    T::get_static().initialize(Arc::new(this));
 
     tokio::spawn(async move {
-        if let Err(err) = Templates::watch_for_updates(path).await {
-            log::error!("could not reload templates: {err}");
+        let fut = shakey::watch_file(
+            path,
+            Duration::from_secs(1),
+            Duration::from_millis(1),
+            move |path| async move {
+                let this = shakey::data::load_yaml().await?;
+                T::get_static().reset();
+                T::get_static().initialize(Arc::new(this));
+                Ok(())
+            },
+        );
+
+        if let Err(err) = fut.await {
+            log::error!("could not reload <replace me>: {err}");
             std::process::exit(0) // TODO not this
         }
     });
@@ -20,19 +47,66 @@ async fn initialize_templates() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn initialize_commands() -> anyhow::Result<()> {
-    let path = get_env_var("SHAKEN_COMMANDS_PATH")?;
-    let commands = Commands::load_from_yaml(&path).await.map(Arc::new)?;
-    shakey::global::GLOBAL_COMMANDS.initialize(commands);
+#[derive(Clone)]
+struct Components {
+    helix_client: HelixClient,
+    spotify_client: SpotifyClient,
+    github_oauth: Arc<GithubOAuth>,
+    gist_id: Arc<str>,
+}
 
-    tokio::spawn(async move {
-        if let Err(err) = Commands::watch_for_updates(path).await {
-            log::error!("could not reload commands: {err}");
-            std::process::exit(0) // TODO not this
-        }
-    });
+impl Components {
+    async fn build() -> anyhow::Result<Self> {
+        let helix_client_id = get_env_var("SHAKEN_TWITCH_CLIENT_ID")?;
+        let helix_client_secret = get_env_var("SHAKEN_TWITCH_CLIENT_SECRET")?;
 
-    Ok(())
+        let helix_oauth =
+            shakey::helix::OAuth::create(&helix_client_id, &helix_client_secret).await?;
+        let helix_client = shakey::helix::HelixClient::new(helix_oauth);
+
+        let spotify_client_id = get_env_var("SHAKEN_SPOTIFY_CLIENT_ID")?;
+        let spotify_client_secret = get_env_var("SHAKEN_SPOTIFY_CLIENT_SECRET")?;
+        let spotify_client =
+            shakey::modules::SpotifyClient::new(&spotify_client_id, &spotify_client_secret).await?;
+
+        let gist_id = get_env_var("SHAKEN_SETTINGS_GIST_ID")?;
+        let gist_id = Arc::<str>::from(&*gist_id);
+
+        let github_oauth_token = get_env_var("SHAKEN_GITHUB_OAUTH_TOKEN")?;
+        let github_oauth = Arc::new(shakey::modules::GithubOAuth {
+            token: github_oauth_token,
+        });
+
+        Ok(Self {
+            helix_client,
+            spotify_client,
+            github_oauth,
+            gist_id,
+        })
+    }
+}
+
+async fn bind_modules<R: Replier>(
+    components: Components,
+) -> anyhow::Result<[Box<dyn Callable<irc::Message<R>, Outcome = ()>>; 7]> {
+    use shakey::modules::*;
+
+    let Components {
+        helix_client,
+        spotify_client,
+        github_oauth,
+        gist_id,
+    } = components;
+
+    let builtin = Builtin::bind().await?.into_callable();
+    let twitch = Twitch::bind(helix_client).await?.into_callable();
+    let spotify = Spotify::bind(spotify_client).await?.into_callable();
+    let crates = Crates::bind().await?.into_callable();
+    let vscode = Vscode::bind(gist_id, github_oauth).await?.into_callable();
+    let help = Help::bind().await?.into_callable();
+    let user_defined = UserDefined::bind().await?.into_callable();
+
+    Ok([builtin, twitch, spotify, crates, vscode, help, user_defined])
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -40,59 +114,16 @@ async fn main() -> anyhow::Result<()> {
     simple_env_load::load_env_from([".dev.env", ".secrets.env"]);
     alto_logger::init_term_logger()?;
 
-    let helix_client_id = get_env_var("SHAKEN_TWITCH_CLIENT_ID")?;
-    let helix_client_secret = get_env_var("SHAKEN_TWITCH_CLIENT_SECRET")?;
-
-    let helix_oauth = shakey::helix::OAuth::create(&helix_client_id, &helix_client_secret).await?;
-    let helix_client = shakey::helix::HelixClient::new(helix_oauth);
-
-    let spotify_client_id = get_env_var("SHAKEN_SPOTIFY_CLIENT_ID")?;
-    let spotify_client_secret = get_env_var("SHAKEN_SPOTIFY_CLIENT_SECRET")?;
-    let spotify_client =
-        shakey::modules::SpotifyClient::new(&spotify_client_id, &spotify_client_secret).await?;
-
-    let gist_id = get_env_var("SHAKEN_SETTINGS_GIST_ID")?;
-    let gist_id = Arc::<str>::from(&*gist_id);
-
-    let github_oauth_token = get_env_var("SHAKEN_GITHUB_OAUTH_TOKEN")?;
-    let oauth = Arc::new(shakey::modules::GithubOAuth {
-        token: github_oauth_token,
-    });
+    let components = Components::build().await?;
 
     loop {
-        initialize_commands().await?;
-        initialize_templates().await?;
+        initialize::<Commands>().await?;
+        initialize::<Templates>().await?;
 
-        let builtin = shakey::modules::Builtin::bind().await?.into_callable();
-        let twitch = shakey::modules::Twitch::bind(helix_client.clone())
-            .await?
-            .into_callable();
-
-        let spotify = shakey::modules::Spotify::bind(spotify_client.clone())
-            .await?
-            .into_callable();
-
-        let crates = shakey::modules::Crates::bind().await?.into_callable();
-
-        let vscode = shakey::modules::Vscode::bind(gist_id.clone(), oauth.clone())
-            .await?
-            .into_callable();
-
-        let help = shakey::modules::Help::bind().await?.into_callable();
-
-        let user_defined = shakey::modules::UserDefined::bind().await?.into_callable();
+        let modules = bind_modules(components.clone()).await?;
 
         if let Err(err) = async move {
-            shakey::irc::run([
-                builtin, //
-                twitch,  //
-                spotify, //
-                crates,  //
-                vscode,  //
-                help,    //
-                user_defined,
-            ])
-            .await?;
+            shakey::irc::run(modules).await?;
             anyhow::Result::<_, anyhow::Error>::Ok(())
         }
         .await

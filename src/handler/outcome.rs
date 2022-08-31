@@ -59,8 +59,8 @@ pub enum MaybeTask<T> {
 impl Outcome for MaybeTask<anyhow::Result<()>> {
     fn into_task(self) -> Option<JoinHandle<anyhow::Result<()>>> {
         match self {
-            MaybeTask::Task(task) => Some(task),
-            MaybeTask::Nope => None,
+            Self::Task(task) => Some(task),
+            Self::Nope => None,
         }
     }
 }

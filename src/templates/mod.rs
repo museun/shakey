@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
+use std::collections::HashMap;
 
 mod macros;
 
@@ -19,7 +14,7 @@ use parsed::Parsed;
 mod verify;
 pub use verify::add_to_registry;
 
-use crate::{global::GLOBAL_TEMPLATES, handler::Response};
+use crate::{data::Interest, handler::Response};
 
 #[derive(Debug, serde::Deserialize)]
 struct Module {
@@ -39,12 +34,17 @@ pub struct Templates {
     modules: HashMap<String, Module>,
 }
 
-impl Templates {
-    pub async fn load_from_yaml(path: impl AsRef<Path> + Send) -> anyhow::Result<Self> {
-        let data = tokio::fs::read_to_string(path).await?;
-        serde_yaml::from_str(&data).map_err(Into::into)
+impl Interest for Templates {
+    fn module() -> &'static str {
+        "shakey"
     }
 
+    fn file() -> &'static str {
+        "templates.yaml"
+    }
+}
+
+impl Templates {
     pub fn render<T>(&self, resp: &T, variant: Variant) -> Option<String>
     where
         T: Response + 'static,
@@ -82,23 +82,5 @@ impl Templates {
             Some(parsed) => Some(parsed),
             None => map.get(&Variant::Default),
         }
-    }
-
-    pub async fn watch_for_updates(path: impl Into<PathBuf> + Send) -> anyhow::Result<()> {
-        crate::util::watch_file(
-            path,
-            Duration::from_secs(1),
-            Duration::from_millis(1),
-            Self::reload_templates,
-        )
-        .await
-    }
-
-    async fn reload_templates(path: PathBuf) -> anyhow::Result<()> {
-        let this = Self::load_from_yaml(path).await.map(Arc::new)?;
-        // TODO verify the new this
-
-        GLOBAL_TEMPLATES.update(this);
-        Ok(())
     }
 }

@@ -4,7 +4,7 @@ use tokio::{
     sync::mpsc::{Sender, UnboundedReceiver},
 };
 
-use crate::{global, handler::Reply, Replier, Response};
+use crate::{global::GlobalItem, handler::Reply, Replier, Response, Templates};
 
 use super::{
     lower::{parse_line, Command, Line},
@@ -57,10 +57,9 @@ pub async fn read_responses<R>(
 {
     use crate::templates::Variant::Default as Irc;
     while let Some(resp) = recv.recv().await {
-        let resp = {
-            let t = global::templates();
-            resp.map(|resp| t.render(&resp, Irc)).transpose()
-        };
+        let resp = resp
+            .map(|resp| Templates::get().render(&resp, Irc))
+            .transpose();
 
         let resp = match resp {
             Some(inner) => inner,

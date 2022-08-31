@@ -9,7 +9,7 @@ pub async fn watch_file<Fut>(
     path: impl Into<PathBuf> + Send,
     sleep: Duration,
     modification: Duration,
-    update: impl FnOnce(PathBuf) -> Fut + Clone + Sync + Send,
+    update: impl Fn(PathBuf) -> Fut + Sync + Send,
 ) -> anyhow::Result<()>
 where
     Fut: Future<Output = anyhow::Result<()>> + Send,
@@ -46,7 +46,7 @@ where
         {
             log::info!("file {} was modified", path.display());
 
-            if let Err(err) = (update.clone())(path.clone()).await {
+            if let Err(err) = (update)(path.clone()).await {
                 log::warn!("cannot update file: {err}");
                 continue;
             }

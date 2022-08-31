@@ -12,7 +12,7 @@ use crate::{get_env_var, util::watch_file};
 
 pub async fn save_yaml<T: Interest>(val: &T) -> anyhow::Result<()>
 where
-    T: serde::Serialize,
+    T: serde::Serialize + Send + Sync,
 {
     let data = serde_yaml::to_string(val)?;
     let root = get_env_var("SHAKEN_DATA_DIR").map(PathBuf::from)?;
@@ -23,7 +23,7 @@ where
 
 pub async fn save_json<T: Interest>(val: &T) -> anyhow::Result<()>
 where
-    T: serde::Serialize,
+    T: serde::Serialize + Send + Sync,
 {
     let data = serde_json::to_string(val)?;
     let root = get_env_var("SHAKEN_DATA_DIR").map(PathBuf::from)?;
@@ -37,6 +37,13 @@ async fn load_data<T: Interest>() -> anyhow::Result<String> {
     tokio::fs::read_to_string(T::get_path(&root))
         .await
         .map_err(Into::into)
+}
+
+pub fn get_data_path<T>() -> anyhow::Result<PathBuf>
+where
+    T: Interest,
+{
+    get_env_var("SHAKEN_DATA_DIR").map(PathBuf::from)
 }
 
 pub async fn load_yaml<T>() -> anyhow::Result<T>
@@ -72,7 +79,7 @@ impl FileTypes {
 
     pub async fn save<T, const FORMAT: u8>(val: &T) -> anyhow::Result<()>
     where
-        T: Interest + serde::Serialize + Send,
+        T: Interest + serde::Serialize + Send + Sync,
     {
         match FORMAT {
             1 => save_yaml(val).await,
@@ -87,18 +94,24 @@ pub struct SaveFile<T: Interest, const FORMAT: u8 = { FileTypes::YAML }>(Arc<RwL
 impl<T: Interest, const FORMAT: u8> SaveFile<T, FORMAT> {
     pub async fn save(&self) -> anyhow::Result<()>
     where
-        T: serde::Serialize + Send,
+        T: serde::Serialize + Send + Sync,
     {
         let this = self.0.read().await;
         FileTypes::save::<_, FORMAT>(&*this).await
     }
 
-    pub async fn get(&self) -> RwLockReadGuard<'_, T> {
+    pub async fn get(&self) -> RwLockReadGuard<'_, T>
+    where
+        T: Send + Sync,
+    {
         let g = self.0.read().await;
-        RwLockReadGuard::map(g, |this| &*this)
+        RwLockReadGuard::map(g, |this| this)
     }
 
-    pub async fn get_mut(&self) -> RwLockMappedWriteGuard<'_, T> {
+    pub async fn get_mut(&self) -> RwLockMappedWriteGuard<'_, T>
+    where
+        T: Send + Sync,
+    {
         let g = self.0.write().await;
         RwLockWriteGuard::map(g, |this| &mut *this)
     }
@@ -118,7 +131,7 @@ where
 {
     pub async fn get(&self) -> RwLockReadGuard<'_, T> {
         let g = self.0.read().await;
-        RwLockReadGuard::map(g, |this| &*this)
+        RwLockReadGuard::map(g, |this| this)
     }
 
     pub async fn get_mut(&self) -> RwLockMappedWriteGuard<'_, T> {
@@ -183,10 +196,13 @@ where
 
                 let watched = watched.clone();
                 watch_file(path, SLEEP, MODIFICATION, {
-                    move |_| async move {
-                        let this = FileTypes::load::<_, FORMAT>().await?;
-                        *watched.0.write().await = this;
-                        Ok(())
+                    move |_| {
+                        let watched = watched.clone();
+                        async move {
+                            let this = FileTypes::load::<_, FORMAT>().await?;
+                            *watched.0.write().await = this;
+                            Ok(())
+                        }
                     }
                 })
             };

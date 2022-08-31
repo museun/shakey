@@ -3,7 +3,7 @@ use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use serde::Serialize;
 
-use crate::{ext::IterExt, global::templates, handler::Response};
+use crate::{ext::IterExt, global::GlobalItem, handler::Response, Templates};
 use std::collections::{BTreeSet, HashMap};
 
 #[derive(Default)]
@@ -45,7 +45,7 @@ where
         .into_iter()
         .collect::<BTreeSet<_>>();
 
-    let templates = templates();
+    let templates = Templates::get();
 
     anyhow::ensure!(
         templates

@@ -14,7 +14,7 @@ pub mod ext;
 mod ser;
 
 mod util;
-pub use util::get_env_var;
+pub use util::{get_env_var, watch_file};
 
 mod testing;
 pub use testing::mock;
