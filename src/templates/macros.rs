@@ -13,6 +13,8 @@ macro_rules! make_response {
         } is $path:literal
     )*) => {
         pub mod responses {
+            #[allow(unused_imports)]
+            use std::borrow::Cow;
             $($crate::make_response!(@inner
                 module: $module;
                 key: $path;

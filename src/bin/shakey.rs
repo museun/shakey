@@ -648,10 +648,8 @@ mod crates {
     use std::borrow::Cow;
 
     use serde::{Deserialize, Deserializer};
-    use shakey::{ext::FormatTime, irc::Message, Arguments, Bind, Outcome, Replier};
+    use shakey::{ext::DurationSince, irc::Message, Arguments, Bind, Outcome, Replier};
     use time::{format_description::FormatItem, macros::format_description, OffsetDateTime};
-
-    pub struct Crates;
 
     shakey::make_response! {
         module: "crates"
@@ -659,18 +657,18 @@ mod crates {
         struct Crate {
             name: String,
             version: String,
-            description: String,
+            description: Cow<'static, str>,
             docs: String,
-            repo: String,
+            repo: Cow<'static, str>,
             updated: String,
         } is "crate"
 
         struct CrateBestMatch {
             name: String,
             version: String,
-            description: String,
+            description: Cow<'static, str>,
             docs: String,
-            repo: String,
+            repo: Cow<'static, str>,
             updated: String,
         } is "crate_best_match"
 
@@ -706,102 +704,86 @@ mod crates {
         OffsetDateTime::parse(&s, &FORMAT).map_err(D::Error::custom)
     }
 
+    pub struct Crates;
+
     impl Crates {
         pub async fn bind<R: Replier>() -> anyhow::Result<Bind<Self, R>> {
             Bind::create::<responses::Responses>(Self)?.bind(Self::lookup_crate)
         }
 
-        fn lookup_crate(&mut self, msg: &Message<impl Replier>, args: Arguments) -> impl Outcome {
-            let query = args["crate"].to_string();
+        fn lookup_crate(
+            &mut self,
+            msg: &Message<impl Replier>,
+            mut args: Arguments,
+        ) -> impl Outcome {
+            let query = args.take("crate");
             let msg = msg.clone();
-            tokio::spawn(async move {
-                #[derive(serde::Deserialize)]
-                struct Resp {
-                    crates: Vec<Crate>,
-                }
+            tokio::spawn(Self::lookup(msg, query))
+        }
 
-                let mut resp: Resp = reqwest::Client::new()
-                    .get("https://crates.io/api/v1/crates")
-                    .header("User-Agent", shakey::USER_AGENT)
-                    .query(&&[("page", "1"), ("per_page", "1"), ("q", &query)])
-                    .send()
-                    .await?
-                    .json()
-                    .await?;
+        async fn lookup(msg: Message<impl Replier>, query: String) -> anyhow::Result<()> {
+            #[derive(serde::Deserialize)]
+            struct Resp {
+                crates: Vec<Crate>,
+            }
 
-                if resp.crates.is_empty() {
-                    msg.say(responses::NotFound { query });
-                    return Ok(());
-                }
+            let mut resp: Resp = reqwest::Client::new()
+                .get("https://crates.io/api/v1/crates")
+                .header("User-Agent", shakey::USER_AGENT)
+                .query(&&[("page", "1"), ("per_page", "1"), ("q", &query)])
+                .send()
+                .await?
+                .json()
+                .await?;
 
-                fn format_crate<R>(
-                    mut crate_: Crate,
-                    map: fn(String, String, String, String, String, String) -> R,
-                ) -> R {
-                    let name = crate_.name;
-                    let version = crate_.max_version;
-                    let description = crate_
-                        .description
-                        .take()
-                        .unwrap_or_else(|| String::from("no description"))
-                        .replace('\n', " ")
-                        .trim()
-                        .to_string();
-                    let docs = crate_
-                        .documentation
-                        .take()
-                        .unwrap_or_else(|| format!("https://docs.rs/{name}"));
-                    let repo = crate_
-                        .repository
-                        .take()
-                        .unwrap_or_else(|| String::from("no repository"));
+            if resp.crates.is_empty() {
+                msg.say(responses::NotFound { query });
+                return Ok(());
+            }
 
-                    let since: std::time::Duration = (OffsetDateTime::now_utc()
-                        - crate_.updated_at)
-                        .try_into()
-                        .expect("valid time");
+            let mut crate_ = resp.crates.remove(0);
 
-                    map(
-                        name,
-                        version,
-                        description,
-                        docs,
-                        repo,
-                        since.as_readable_time(),
-                    )
-                }
+            let description = crate_
+                .description
+                .take()
+                .map(|s| s.replace('\n', " ").trim().to_string())
+                .map(Cow::from)
+                .unwrap_or_else(|| Cow::from("no description"));
 
-                let crate_ = resp.crates.remove(0);
-                if crate_.exact_match {
-                    msg.say(format_crate(
-                        crate_,
-                        |name, version, description, docs, repo, updated| responses::Crate {
-                            name,
-                            version,
-                            description,
-                            docs,
-                            repo,
-                            updated,
-                        },
-                    ))
-                } else {
-                    msg.say(format_crate(
-                        crate_,
-                        |name, version, description, docs, repo, updated| {
-                            responses::CrateBestMatch {
-                                name,
-                                version,
-                                description,
-                                docs,
-                                repo,
-                                updated,
-                            }
-                        },
-                    ))
-                }
+            let docs = crate_
+                .documentation
+                .take()
+                .unwrap_or_else(|| format!("https://docs.rs/{}", crate_.name));
 
-                anyhow::Result::Ok(())
-            })
+            let repo = crate_
+                .repository
+                .take()
+                .map(Cow::from)
+                .unwrap_or_else(|| Cow::from("no repository"));
+
+            let updated = crate_.updated_at.duration_since_now_utc_human();
+
+            if crate_.exact_match {
+                msg.say(responses::Crate {
+                    name: crate_.name,
+                    version: crate_.max_version,
+                    description,
+                    docs,
+                    repo,
+                    updated,
+                })
+            } else {
+                msg.say(responses::CrateBestMatch {
+                    name: crate_.name,
+                    version: crate_.max_version,
+                    description,
+                    docs,
+                    repo,
+                    updated,
+                })
+            }
+
+            Ok(())
         }
     }
 }

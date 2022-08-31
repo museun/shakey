@@ -4,6 +4,8 @@ use std::{
     task::{Context, Poll},
 };
 
+use time::OffsetDateTime;
+
 pub trait IterExt
 where
     Self: Sized + Iterator,
@@ -165,5 +167,21 @@ impl<L: Future, R: Future> Future for Select<L, R> {
             right => Right
             left => Left
         }
+    }
+}
+
+pub trait DurationSince: Sized {
+    fn duration_since_now_utc_human(self) -> String {
+        self.duration_since_human(OffsetDateTime::now_utc())
+    }
+
+    fn duration_since_human(self, later: OffsetDateTime) -> String;
+}
+
+impl DurationSince for time::OffsetDateTime {
+    fn duration_since_human(self, later: OffsetDateTime) -> String {
+        std::time::Duration::try_from(later - self)
+            .expect("valid time")
+            .as_readable_time()
     }
 }
