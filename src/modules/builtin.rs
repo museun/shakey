@@ -3,6 +3,7 @@ use std::{borrow::Cow, time::Duration};
 use crate::{
     data::{FileTypes, Interest, Watch, WatchFile},
     ext::FormatTime,
+    handler::Components,
     irc::Message,
     Arguments, Bind, Outcome, Replier,
 };
@@ -80,7 +81,7 @@ pub struct Builtin {
 }
 
 impl Builtin {
-    pub async fn bind<R>() -> anyhow::Result<Bind<Self, R>>
+    pub async fn bind<R>(_: Components) -> anyhow::Result<Bind<Self, R>>
     where
         R: Replier + 'static,
     {

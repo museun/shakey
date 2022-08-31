@@ -2,12 +2,12 @@ use tokio::io::BufStream;
 
 use crate::{
     ext::{Either, FutureExt},
+    handler::BoxedCallable,
     irc::{
         lower::Command,
         proto::{connect, join, read_line, read_responses, wait_for_ready, write_raw},
     },
     util::get_env_var,
-    Callable, Response,
 };
 
 mod proto;
@@ -20,9 +20,7 @@ pub use message::Message;
 
 mod lower;
 
-type BoxedCallable = Box<dyn Callable<Message<Box<dyn Response>>, Outcome = ()>>;
-
-pub async fn run<const N: usize>(mut handlers: [BoxedCallable; N]) -> anyhow::Result<()> {
+pub async fn run(mut handlers: Vec<BoxedCallable>) -> anyhow::Result<()> {
     let channels = get_env_var("SHAKEN_TWITCH_CHANNELS")?;
     let channels = channels.split(',').collect::<Vec<_>>();
     anyhow::ensure!(!channels.is_empty(), "channels cannot be empty");

@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, path::PathBuf, sync::Arc};
 
-use crate::{ext::IterExt, irc, Arguments, Bind, Outcome, Replier};
+use crate::{ext::IterExt, handler::Components, irc, Arguments, Bind, Outcome, Replier};
 use anyhow::Context;
 use rspotify::{
     model::{FullTrack, PlayableItem, TrackId},
@@ -179,10 +179,12 @@ pub struct Spotify {
 }
 
 impl Spotify {
-    pub async fn bind<R: Replier>(client: SpotifyClient) -> anyhow::Result<Bind<Self, R>> {
-        Bind::create::<responses::Responses>(Self { client })?
-            .bind(Self::current_song)?
-            .bind(Self::previous_song)
+    pub async fn bind<R: Replier>(components: Components) -> anyhow::Result<Bind<Self, R>> {
+        Bind::create::<responses::Responses>(Self {
+            client: components.spotify_client,
+        })?
+        .bind(Self::current_song)?
+        .bind(Self::previous_song)
     }
 
     fn current_song(&mut self, msg: &irc::Message<impl Replier>, _: Arguments) -> impl Outcome {

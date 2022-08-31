@@ -1,112 +1,108 @@
 #![cfg_attr(debug_assertions, allow(dead_code, unused_variables,))]
 
-use std::{sync::Arc, time::Duration};
+use std::{future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use shakey::{
-    data::Interest,
-    get_env_var,
+    data::{BoxedFuture, Interest},
+    ext::FutureExt,
     global::{Global, GlobalItem},
-    helix::HelixClient,
-    irc,
-    modules::{GithubOAuth, SpotifyClient},
-    Callable, Commands, Replier, Templates,
+    handler::Components,
+    irc, Bind, Callable, Commands, Config, Replier, Templates,
 };
+use tokio::{sync::Notify, task::JoinHandle};
 
-async fn initialize<T>() -> anyhow::Result<()>
+async fn initialize<T>(
+    stop: impl Future<Output = ()> + Send + 'static,
+) -> anyhow::Result<JoinHandle<()>>
 where
     T: Default + Send + Sync + 'static,
     T: Interest + for<'de> serde::Deserialize<'de>,
     Global<'static, T>:,
     T: GlobalItem,
 {
+    async fn reload<T>(path: PathBuf) -> anyhow::Result<()>
+    where
+        T: Default + Send + Sync + 'static,
+        T: Interest + for<'de> serde::Deserialize<'de>,
+        Global<'static, T>:,
+        T: GlobalItem,
+    {
+        let this = shakey::data::load_yaml().await?;
+        T::get_static().reset();
+        T::get_static().initialize(Arc::new(this));
+        Ok(())
+    }
+
     let path = shakey::data::get_data_path::<T>()?;
-    let this = shakey::data::load_yaml().await?;
+    reload::<T>(path.clone()).await?;
 
-    T::get_static().reset();
-    T::get_static().initialize(Arc::new(this));
-
-    tokio::spawn(async move {
+    Ok(tokio::spawn(async move {
         let fut = shakey::watch_file(
             path,
             Duration::from_secs(1),
             Duration::from_millis(1),
-            move |path| async move {
-                let this = shakey::data::load_yaml().await?;
-                T::get_static().reset();
-                T::get_static().initialize(Arc::new(this));
-                Ok(())
-            },
+            reload::<T>,
         );
 
-        if let Err(err) = fut.await {
-            log::error!("could not reload <replace me>: {err}");
-            std::process::exit(0) // TODO not this
+        use shakey::ext::Either::*;
+        match stop.select(fut).await {
+            Left(..) => {}
+            Right(Err(err)) => log::error!("could not reload {}: {err}", T::description()),
+            _ => {}
         }
-    });
-
-    Ok(())
+    }))
 }
 
-#[derive(Clone)]
-struct Components {
-    helix_client: HelixClient,
-    spotify_client: SpotifyClient,
-    github_oauth: Arc<GithubOAuth>,
-    gist_id: Arc<str>,
+struct Modules<R: Replier> {
+    components: Components,
+    inner: Vec<Box<dyn Callable<irc::Message<R>, Outcome = ()>>>,
 }
 
-impl Components {
-    async fn build() -> anyhow::Result<Self> {
-        let helix_client_id = get_env_var("SHAKEN_TWITCH_CLIENT_ID")?;
-        let helix_client_secret = get_env_var("SHAKEN_TWITCH_CLIENT_SECRET")?;
+impl<R: Replier> Modules<R> {
+    fn new(components: Components) -> Self {
+        Self {
+            components,
+            inner: vec![],
+        }
+    }
 
-        let helix_oauth =
-            shakey::helix::OAuth::create(&helix_client_id, &helix_client_secret).await?;
-        let helix_client = shakey::helix::HelixClient::new(helix_oauth);
+    async fn add<T, F, Fut>(mut self, ctor: F) -> anyhow::Result<Self>
+    where
+        F: Fn(Components) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = anyhow::Result<Bind<T, R>>> + Send,
+        T: Send + Sync + 'static,
+    {
+        let binding = ctor(self.components.clone()).await?;
+        self.inner.push(binding.into_callable());
+        Ok(self)
+    }
 
-        let spotify_client_id = get_env_var("SHAKEN_SPOTIFY_CLIENT_ID")?;
-        let spotify_client_secret = get_env_var("SHAKEN_SPOTIFY_CLIENT_SECRET")?;
-        let spotify_client =
-            shakey::modules::SpotifyClient::new(&spotify_client_id, &spotify_client_secret).await?;
-
-        let gist_id = get_env_var("SHAKEN_SETTINGS_GIST_ID")?;
-        let gist_id = Arc::<str>::from(&*gist_id);
-
-        let github_oauth_token = get_env_var("SHAKEN_GITHUB_OAUTH_TOKEN")?;
-        let github_oauth = Arc::new(shakey::modules::GithubOAuth {
-            token: github_oauth_token,
-        });
-
-        Ok(Self {
-            helix_client,
-            spotify_client,
-            github_oauth,
-            gist_id,
-        })
+    fn into_list(self) -> Vec<Box<dyn Callable<irc::Message<R>, Outcome = ()>>> {
+        self.inner
     }
 }
 
 async fn bind_modules<R: Replier>(
     components: Components,
-) -> anyhow::Result<[Box<dyn Callable<irc::Message<R>, Outcome = ()>>; 7]> {
+) -> anyhow::Result<Vec<Box<dyn Callable<irc::Message<R>, Outcome = ()>>>> {
     use shakey::modules::*;
 
-    let Components {
-        helix_client,
-        spotify_client,
-        github_oauth,
-        gist_id,
-    } = components;
-
-    let builtin = Builtin::bind().await?.into_callable();
-    let twitch = Twitch::bind(helix_client).await?.into_callable();
-    let spotify = Spotify::bind(spotify_client).await?.into_callable();
-    let crates = Crates::bind().await?.into_callable();
-    let vscode = Vscode::bind(gist_id, github_oauth).await?.into_callable();
-    let help = Help::bind().await?.into_callable();
-    let user_defined = UserDefined::bind().await?.into_callable();
-
-    Ok([builtin, twitch, spotify, crates, vscode, help, user_defined])
+    Ok(Modules::<R>::new(components)
+        .add(Builtin::bind)
+        .await?
+        .add(Twitch::bind)
+        .await?
+        .add(Spotify::bind)
+        .await?
+        .add(Crates::bind)
+        .await?
+        .add(Vscode::bind)
+        .await?
+        .add(Help::bind)
+        .await?
+        .add(UserDefined::bind)
+        .await?
+        .into_list())
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -114,11 +110,14 @@ async fn main() -> anyhow::Result<()> {
     simple_env_load::load_env_from([".dev.env", ".secrets.env"]);
     alto_logger::init_term_logger()?;
 
-    let components = Components::build().await?;
+    let config = Config::load("config.yaml").await?;
+    let components = Components::build(&config).await?;
 
     loop {
-        initialize::<Commands>().await?;
-        initialize::<Templates>().await?;
+        let (notified, notifier) = notify();
+
+        let commands_task = initialize::<Commands>(notified()).await?;
+        let templates_task = initialize::<Templates>(notified()).await?;
 
         let modules = bind_modules(components.clone()).await?;
 
@@ -139,8 +138,37 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
 
+            notifier();
+            let _ = tokio::join!(commands_task, templates_task,);
+
             log::warn!("reconnecting in 5 seconds");
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         }
     }
 }
+
+fn notify() -> (impl Fn() -> BoxedFuture<'static, ()>, impl FnOnce()) {
+    let notify = Arc::new(Notify::new());
+    (
+        {
+            let notify = notify.clone();
+            move || {
+                let notify = notify.clone();
+                Box::pin(async move { notify.notified().await })
+            }
+        },
+        move || notify.notify_waiters(),
+    )
+}
+
+#[cfg(not(debug_assertions))]
+const _: () = {
+    include_str!("commands.yaml");
+};
+
+#[cfg(not(debug_assertions))]
+const _: () = {
+    include_str!("templates.yaml");
+};
+
+// BUG EXTRA TODO (really read this one) provide default commands/templates.yaml

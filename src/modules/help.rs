@@ -1,4 +1,7 @@
-use crate::{ext::IterExt, global::GlobalItem, irc::Message, Arguments, Bind, Commands, Replier};
+use crate::{
+    ext::IterExt, global::GlobalItem, handler::Components, irc::Message, Arguments, Bind, Commands,
+    Replier,
+};
 
 // TODO get rid of this type
 #[derive(
@@ -56,7 +59,7 @@ crate::make_response! {
 pub struct Help;
 
 impl Help {
-    pub async fn bind<R: Replier>() -> anyhow::Result<Bind<Self, R>> {
+    pub async fn bind<R: Replier>(_: Components) -> anyhow::Result<Bind<Self, R>> {
         Bind::create::<responses::Responses>(Self)?.bind(Self::help)
     }
 

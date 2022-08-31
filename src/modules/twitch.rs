@@ -1,5 +1,6 @@
 use crate::{
     ext::FormatTime,
+    handler::Components,
     helix::{data::Stream, HelixClient},
     irc::Message,
     Arguments, Bind, Outcome, Replier,
@@ -29,10 +30,12 @@ pub struct Twitch {
 }
 
 impl Twitch {
-    pub async fn bind<R: Replier + 'static>(client: HelixClient) -> anyhow::Result<Bind<Self, R>> {
-        Bind::create::<responses::Responses>(Self { client })?
-            .bind(Self::uptime)?
-            .bind(Self::viewers)
+    pub async fn bind<R: Replier>(components: Components) -> anyhow::Result<Bind<Self, R>> {
+        Bind::create::<responses::Responses>(Self {
+            client: components.helix_client,
+        })?
+        .bind(Self::uptime)?
+        .bind(Self::viewers)
     }
 
     fn uptime(&mut self, msg: &Message<impl Replier>, args: Arguments) -> impl Outcome {

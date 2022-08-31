@@ -12,6 +12,7 @@ pub static GLOBAL_COMMANDS: Global<'static, Commands> = Global(&COMMANDS);
 pub static GLOBAL_TEMPLATES: Global<'static, Templates> = Global(&TEMPLATES);
 
 pub trait GlobalItem: Sized + Send + Sync + 'static {
+    fn description() -> &'static str;
     fn get() -> Arc<Self> {
         Self::get_static().get()
     }
@@ -22,11 +23,19 @@ impl GlobalItem for Commands {
     fn get_static() -> &'static Global<'static, Self> {
         &GLOBAL_COMMANDS
     }
+
+    fn description() -> &'static str {
+        "Commands"
+    }
 }
 
 impl GlobalItem for Templates {
     fn get_static() -> &'static Global<'static, Self> {
         &GLOBAL_TEMPLATES
+    }
+
+    fn description() -> &'static str {
+        "Templates"
     }
 }
 

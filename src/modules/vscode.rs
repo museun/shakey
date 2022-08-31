@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{irc::Message, Arguments, Bind, Outcome, Replier};
+use crate::{handler::Components, irc::Message, Arguments, Bind, Outcome, Replier};
 use anyhow::Context;
 
 crate::make_response! {
@@ -35,13 +35,13 @@ pub struct Vscode {
 }
 
 impl Vscode {
-    pub async fn bind<R: Replier>(
-        gist_id: Arc<str>,
-        oauth: Arc<OAuth>,
-    ) -> anyhow::Result<Bind<Self, R>> {
-        Bind::create::<responses::Responses>(Self { gist_id, oauth })?
-            .bind(Self::theme)?
-            .bind(Self::fonts)
+    pub async fn bind<R: Replier>(components: Components) -> anyhow::Result<Bind<Self, R>> {
+        Bind::create::<responses::Responses>(Self {
+            gist_id: components.gist_id,
+            oauth: components.github_oauth,
+        })?
+        .bind(Self::theme)?
+        .bind(Self::fonts)
     }
 
     fn theme(&mut self, msg: &Message<impl Replier>, _: Arguments) -> impl Outcome {

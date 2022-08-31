@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    data::Interest, ext::IterExt, irc::Message, responses::RequiresPermission, Arguments, Bind,
-    Outcome, Replier,
+    data::Interest, ext::IterExt, handler::Components, irc::Message, responses::RequiresPermission,
+    Arguments, Bind, Outcome, Replier,
 };
 
 crate::make_response! {
@@ -109,7 +109,7 @@ pub struct UserDefined {
 }
 
 impl UserDefined {
-    pub async fn bind<R: Replier>() -> anyhow::Result<Bind<Self, R>> {
+    pub async fn bind<R: Replier>(_: Components) -> anyhow::Result<Bind<Self, R>> {
         let commands = crate::data::load_yaml().await?;
         Bind::create::<responses::Responses>(Self { commands })?
             .bind(Self::add)?
