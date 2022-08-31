@@ -6,8 +6,8 @@ use shakey::{
     data::{BoxedFuture, Interest},
     ext::FutureExt,
     global::{Global, GlobalItem},
-    handler::Components,
-    irc, Bind, Callable, Commands, Config, Replier, Templates,
+    handler::{BoxedCallable, Components},
+    irc, Bind, Commands, Config, Replier, Templates,
 };
 use tokio::{sync::Notify, task::JoinHandle};
 
@@ -55,7 +55,7 @@ where
 
 struct Modules<R: Replier> {
     components: Components,
-    inner: Vec<Box<dyn Callable<irc::Message<R>, Outcome = ()>>>,
+    inner: Vec<BoxedCallable<R>>,
 }
 
 impl<R: Replier> Modules<R> {
@@ -77,31 +77,22 @@ impl<R: Replier> Modules<R> {
         Ok(self)
     }
 
-    fn into_list(self) -> Vec<Box<dyn Callable<irc::Message<R>, Outcome = ()>>> {
+    fn into_list(self) -> Vec<BoxedCallable<R>> {
         self.inner
     }
 }
 
-async fn bind_modules<R: Replier>(
-    components: Components,
-) -> anyhow::Result<Vec<Box<dyn Callable<irc::Message<R>, Outcome = ()>>>> {
+#[rustfmt::skip]
+async fn bind_modules<R: Replier>(components: Components) -> anyhow::Result<Vec<BoxedCallable<R>>> {
     use shakey::modules::*;
-
     Ok(Modules::<R>::new(components)
-        .add(Builtin::bind)
-        .await?
-        .add(Twitch::bind)
-        .await?
-        .add(Spotify::bind)
-        .await?
-        .add(Crates::bind)
-        .await?
-        .add(Vscode::bind)
-        .await?
-        .add(Help::bind)
-        .await?
-        .add(UserDefined::bind)
-        .await?
+        .add(Builtin::bind).await?
+        .add(Twitch::bind).await?
+        .add(Spotify::bind).await?
+        .add(Crates::bind).await?
+        .add(Vscode::bind).await?
+        .add(Help::bind).await?
+        .add(UserDefined::bind).await?
         .into_list())
 }
 

@@ -63,4 +63,5 @@ impl Components {
     }
 }
 
-pub type BoxedCallable = Box<dyn Callable<crate::irc::Message<Box<dyn Response>>, Outcome = ()>>;
+pub type BoxedCallable<R = Box<dyn Response>> =
+    Box<dyn Callable<crate::irc::Message<R>, Outcome = ()>>;
