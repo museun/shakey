@@ -21,3 +21,6 @@ pub use user_defined::UserDefined;
 
 mod another_viewer;
 pub use another_viewer::AnotherViewer;
+
+mod shakespeare;
+pub use shakespeare::Shakespeare;

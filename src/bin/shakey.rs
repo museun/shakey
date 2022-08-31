@@ -94,6 +94,7 @@ async fn bind_modules<R: Replier>(components: Components) -> anyhow::Result<Vec<
         .add(Help::bind).await?
         .add(UserDefined::bind).await?
         .add(AnotherViewer::bind).await?
+        .add(Shakespeare::bind).await?
         .into_list())
 }
 
