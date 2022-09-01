@@ -1,6 +1,9 @@
 use crate::{
-    ext::IterExt, global::GlobalItem, handler::Components, irc::Message, Arguments, Bind, Commands,
-    Replier,
+    ext::IterExt,
+    global::GlobalItem,
+    handler::{Bindable, Components},
+    irc::Message,
+    Arguments, Bind, Commands, Replier,
 };
 
 // TODO get rid of this type
@@ -58,11 +61,15 @@ crate::make_response! {
 
 pub struct Help;
 
-impl Help {
-    pub async fn bind<R: Replier>(_: Components) -> anyhow::Result<Bind<Self, R>> {
-        Bind::create::<responses::Responses>(Self)?.bind(Self::help)
+#[async_trait::async_trait]
+impl<R: Replier> Bindable<R> for Help {
+    type Responses = responses::Responses;
+    async fn bind(_: &Components) -> anyhow::Result<Bind<Self, R>> {
+        Bind::create(Self)?.bind(Self::help)
     }
+}
 
+impl Help {
     fn help(&mut self, msg: &Message<impl Replier>, args: Arguments) {
         const MAX_PER_LINE: usize = 10;
 

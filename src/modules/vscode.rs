@@ -1,6 +1,12 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
-use crate::{handler::Components, irc::Message, Arguments, Bind, Outcome, Replier};
+use crate::{
+    get_env_var,
+    github::GistClient,
+    handler::{Bindable, Components},
+    irc::Message,
+    Arguments, Bind, Outcome, Replier,
+};
 use anyhow::Context;
 
 crate::make_response! {
@@ -17,44 +23,37 @@ crate::make_response! {
     } is "fonts"
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
-struct FontsAndTheme {
-    editor_font: String,
-    terminal_font: String,
-    theme_url: String,
-    theme_variant: String,
-}
-
-pub struct OAuth {
-    pub token: String,
-}
-
 pub struct Vscode {
-    gist_id: Arc<str>,
-    oauth: Arc<OAuth>,
+    settings_gist_id: Arc<str>,
+    gist_client: GistClient,
+}
+
+#[async_trait::async_trait]
+impl<R: Replier> Bindable<R> for Vscode {
+    type Responses = responses::Responses;
+
+    async fn bind(components: &Components) -> anyhow::Result<Bind<Self, R>> {
+        let this = Self {
+            settings_gist_id: get_env_var("SHAKEN_SETTINGS_GIST_ID").map(Arc::from)?,
+            gist_client: components.get(),
+        };
+
+        Bind::create(this)?.bind(Self::theme)?.bind(Self::fonts)
+    }
 }
 
 impl Vscode {
-    pub async fn bind<R: Replier>(components: Components) -> anyhow::Result<Bind<Self, R>> {
-        Bind::create::<responses::Responses>(Self {
-            gist_id: components.gist_id,
-            oauth: components.github_oauth,
-        })?
-        .bind(Self::theme)?
-        .bind(Self::fonts)
-    }
-
     fn theme(&mut self, msg: &Message<impl Replier>, _: Arguments) -> impl Outcome {
         async fn theme(
             msg: Message<impl Replier>,
             gist_id: Arc<str>,
-            oauth: Arc<OAuth>,
+            client: GistClient,
         ) -> anyhow::Result<()> {
             let FontsAndTheme {
                 theme_url,
                 theme_variant,
                 ..
-            } = Vscode::get_current_settings(gist_id, oauth).await?;
+            } = Vscode::get_current_settings(gist_id, client).await?;
 
             msg.say(responses::Theme {
                 theme_url,
@@ -65,21 +64,21 @@ impl Vscode {
         }
 
         let msg = msg.clone();
-        let (gist_id, oauth) = (self.gist_id.clone(), self.oauth.clone());
-        tokio::spawn(theme(msg, gist_id, oauth))
+        let (gist_id, client) = (self.settings_gist_id.clone(), self.gist_client.clone());
+        tokio::spawn(theme(msg, gist_id, client))
     }
 
     fn fonts(&mut self, msg: &Message<impl Replier>, _: Arguments) -> impl Outcome {
         async fn fonts(
             msg: Message<impl Replier>,
             gist_id: Arc<str>,
-            oauth: Arc<OAuth>,
+            client: GistClient,
         ) -> anyhow::Result<()> {
             let FontsAndTheme {
                 editor_font,
                 terminal_font,
                 ..
-            } = Vscode::get_current_settings(gist_id, oauth).await?;
+            } = Vscode::get_current_settings(gist_id, client).await?;
 
             msg.say(responses::Fonts {
                 editor: editor_font,
@@ -90,50 +89,26 @@ impl Vscode {
         }
 
         let msg = msg.clone();
-        let (gist_id, oauth) = (self.gist_id.clone(), self.oauth.clone());
-        tokio::spawn(fonts(msg, gist_id, oauth))
+        let (gist_id, client) = (self.settings_gist_id.clone(), self.gist_client.clone());
+        tokio::spawn(fonts(msg, gist_id, client))
     }
 
     async fn get_current_settings(
         gist_id: Arc<str>,
-        oauth: Arc<OAuth>,
+        client: GistClient,
     ) -> anyhow::Result<FontsAndTheme> {
-        #[derive(Debug, ::serde::Deserialize)]
-        struct File {
-            content: String,
-        }
-
-        async fn get_gist_files(
-            id: &str,
-            OAuth { token }: &OAuth,
-        ) -> anyhow::Result<HashMap<String, File>> {
-            #[derive(Debug, ::serde::Deserialize)]
-            struct Response {
-                files: HashMap<String, File>,
-            }
-
-            let resp: Response = [
-                ("Accept", "application/vnd.github+json"),
-                ("Authorization", &format!("token {token}")),
-                ("User-Agent", crate::USER_AGENT),
-            ]
-            .into_iter()
-            .fold(
-                reqwest::Client::new().get(format!("https://api.github.com/gists/{id}")),
-                |req, (k, v)| req.header(k, v),
-            )
-            .send()
-            .await?
-            .json()
-            .await?;
-
-            Ok(resp.files)
-        }
-
-        let files = get_gist_files(&gist_id, &oauth).await?;
+        let files = client.get_gist_files(&gist_id).await?;
         let file = files
             .get("vscode settings.json") // TODO don't hardcode this
             .with_context(|| "cannot find settings")?;
         serde_json::from_str(&file.content).map_err(Into::into)
     }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct FontsAndTheme {
+    editor_font: String,
+    terminal_font: String,
+    theme_url: String,
+    theme_variant: String,
 }

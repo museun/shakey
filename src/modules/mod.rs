@@ -5,13 +5,13 @@ mod builtin;
 pub use builtin::Builtin;
 
 mod spotify;
-pub use spotify::{Spotify, SpotifyClient};
+pub use spotify::Spotify;
 
 mod crates;
 pub use crates::Crates;
 
 mod vscode;
-pub use vscode::{OAuth as GithubOAuth, Vscode};
+pub use vscode::Vscode;
 
 mod help;
 pub use help::Help;

@@ -1,7 +1,10 @@
 use std::borrow::Cow;
 
 use crate::{
-    ext::DurationSince, handler::Components, irc::Message, Arguments, Bind, Outcome, Replier,
+    ext::DurationSince,
+    handler::{Bindable, Components},
+    irc::Message,
+    Arguments, Bind, Outcome, Replier,
 };
 use serde::{Deserialize, Deserializer};
 use time::{format_description::FormatItem, macros::format_description, OffsetDateTime};
@@ -61,11 +64,15 @@ where
 
 pub struct Crates;
 
-impl Crates {
-    pub async fn bind<R: Replier>(_: Components) -> anyhow::Result<Bind<Self, R>> {
-        Bind::create::<responses::Responses>(Self)?.bind(Self::lookup_crate)
+#[async_trait::async_trait]
+impl<R: Replier> Bindable<R> for Crates {
+    type Responses = responses::Responses;
+    async fn bind(_: &Components) -> anyhow::Result<Bind<Self, R>> {
+        Bind::create(Self)?.bind(Self::lookup_crate)
     }
+}
 
+impl Crates {
     fn lookup_crate(&mut self, msg: &Message<impl Replier>, mut args: Arguments) -> impl Outcome {
         let query = args.take("crate");
         let msg = msg.clone();

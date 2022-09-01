@@ -1,6 +1,11 @@
 use std::sync::Arc;
 
-use crate::{handler::Components, helix::EmoteMap, irc::Message, Bind, Replier};
+use crate::{
+    handler::{Bindable, Components},
+    helix::EmoteMap,
+    irc::Message,
+    Bind, Replier,
+};
 
 crate::make_response! {
     module: "another_viewer"
@@ -14,14 +19,19 @@ pub struct AnotherViewer {
     emote_map: Arc<EmoteMap>,
 }
 
-impl AnotherViewer {
-    pub async fn bind<R: Replier>(components: Components) -> anyhow::Result<Bind<Self, R>> {
-        Bind::create::<responses::Responses>(Self {
-            emote_map: components.emote_map,
-        })?
-        .listen(Self::listen)
-    }
+#[async_trait::async_trait]
+impl<R: Replier> Bindable<R> for AnotherViewer {
+    type Responses = responses::Responses;
 
+    async fn bind(components: &Components) -> anyhow::Result<Bind<Self, R>> {
+        let this = Self {
+            emote_map: components.get(),
+        };
+        Bind::create(this)?.listen(Self::listen)
+    }
+}
+
+impl AnotherViewer {
     fn listen(&mut self, msg: &Message<impl Replier>) {
         if self.try_kappa(msg) {
             return;

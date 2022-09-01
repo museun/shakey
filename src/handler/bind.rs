@@ -11,7 +11,10 @@ use crate::{
     RegisterResponse, Replier,
 };
 
-use super::arguments::{ExampleArgs, Match};
+use super::{
+    arguments::{ExampleArgs, Match},
+    Bindable,
+};
 
 type BoxedHandler<R> = Box<dyn Fn(&irc::Message<R>) + Send + Sync>;
 
@@ -43,8 +46,11 @@ where
     T: Send + Sync + 'static,
     R: Replier + Send + Sync + 'static,
 {
-    pub fn create<P: RegisterResponse>(this: T) -> anyhow::Result<Self> {
-        P::register()?;
+    pub fn create(this: T) -> anyhow::Result<Self>
+    where
+        T: Bindable<R>,
+    {
+        T::Responses::register()?;
         Ok(Self {
             this: Arc::new(parking_lot::Mutex::new(this)),
             handlers: vec![],

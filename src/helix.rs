@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::config::Secret;
+use crate::env::Secret;
 
 #[derive(Clone)]
 pub struct HelixClient {
@@ -126,15 +126,17 @@ pub struct EmoteMap {
 }
 
 impl EmoteMap {
-    pub fn with_emotes<'k, 'v, I>(mut self, iter: I) -> Self
+    pub fn with_emotes<'k, 'v, I>(self, iter: I) -> Self
     where
         I: Iterator<Item = (&'k str, &'v str)>,
     {
-        for (name, id) in iter {
-            self.id_to_name.insert(id.into(), name.into());
-            self.name_to_id.insert(name.into(), id.into());
-            self.names.insert(name.into());
-        }
+        iter.fold(self, |this, (name, id)| this.with_emote(name, id))
+    }
+
+    pub fn with_emote<'k, 'v>(mut self, name: &'k str, id: &'v str) -> Self {
+        self.id_to_name.insert(id.into(), name.into());
+        self.name_to_id.insert(name.into(), id.into());
+        self.names.insert(name.into());
         self
     }
 

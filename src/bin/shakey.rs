@@ -3,11 +3,12 @@
 use std::{future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use shakey::{
+    config::Config,
     data::{BoxedFuture, Interest},
     ext::FutureExt,
     global::{Global, GlobalItem},
-    handler::{BoxedCallable, Components},
-    irc, Bind, Commands, Config, Replier, Templates,
+    handler::{Bindable, BoxedCallable, Components},
+    irc, Commands, Replier, Templates,
 };
 use tokio::{sync::Notify, task::JoinHandle};
 
@@ -53,26 +54,21 @@ where
     }))
 }
 
-struct Modules<R: Replier> {
-    components: Components,
+struct Modules<'a, R: Replier> {
+    components: &'a Components,
     inner: Vec<BoxedCallable<R>>,
 }
 
-impl<R: Replier> Modules<R> {
-    fn new(components: Components) -> Self {
+impl<'a, R: Replier> Modules<'a, R> {
+    fn new(components: &'a Components) -> Self {
         Self {
             components,
             inner: vec![],
         }
     }
 
-    async fn add<T, F, Fut>(mut self, ctor: F) -> anyhow::Result<Self>
-    where
-        F: Fn(Components) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = anyhow::Result<Bind<T, R>>> + Send,
-        T: Send + Sync + 'static,
-    {
-        let binding = ctor(self.components.clone()).await?;
+    async fn add<T: Bindable<R>>(mut self) -> anyhow::Result<Modules<'a, R>> {
+        let binding = T::bind(self.components).await?;
         self.inner.push(binding.into_callable());
         Ok(self)
     }
@@ -83,18 +79,18 @@ impl<R: Replier> Modules<R> {
 }
 
 #[rustfmt::skip]
-async fn bind_modules<R: Replier>(components: Components) -> anyhow::Result<Vec<BoxedCallable<R>>> {
+async fn bind_modules<R: Replier>(components: & Components) -> anyhow::Result<Vec<BoxedCallable<R>>> {
     use shakey::modules::*;
     Ok(Modules::<R>::new(components)
-        .add(Builtin::bind).await?
-        .add(Twitch::bind).await?
-        .add(Spotify::bind).await?
-        .add(Crates::bind).await?
-        .add(Vscode::bind).await?
-        .add(Help::bind).await?
-        .add(UserDefined::bind).await?
-        .add(AnotherViewer::bind).await?
-        .add(Shakespeare::bind).await?
+        .add::<Builtin>().await?
+        .add::<Twitch>().await?
+        .add::<Spotify>().await?
+        .add::<Crates>().await?
+        .add::<Vscode>().await?
+        .add::<Help>().await?
+        .add::<UserDefined>().await?
+        .add::<AnotherViewer>().await?
+        .add::<Shakespeare>().await?
         .into_list())
 }
 
@@ -104,7 +100,7 @@ async fn main() -> anyhow::Result<()> {
     alto_logger::init_term_logger()?;
 
     let config = Config::load("config.yaml").await?;
-    let components = Components::build(&config).await?;
+    let components = shakey::register_components(&config).await?;
 
     loop {
         let (notified, notifier) = notify();
@@ -112,7 +108,7 @@ async fn main() -> anyhow::Result<()> {
         let commands_task = initialize::<Commands>(notified()).await?;
         let templates_task = initialize::<Templates>(notified()).await?;
 
-        let modules = bind_modules(components.clone()).await?;
+        let modules = bind_modules(&components).await?;
 
         if let Err(err) = async move {
             shakey::irc::run(modules).await?;

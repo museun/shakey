@@ -3,7 +3,7 @@ use std::{borrow::Cow, time::Duration};
 use crate::{
     data::{FileTypes, Interest, Watch, WatchFile},
     ext::FormatTime,
-    handler::Components,
+    handler::{Bindable, Components},
     irc::Message,
     Arguments, Bind, Outcome, Replier,
 };
@@ -80,18 +80,16 @@ pub struct Builtin {
     greetings: WatchFile<Greetings>,
 }
 
-impl Builtin {
-    pub async fn bind<R>(_: Components) -> anyhow::Result<Bind<Self, R>>
-    where
-        R: Replier + 'static,
-    {
+#[async_trait::async_trait]
+impl<R: Replier> Bindable<R> for Builtin {
+    type Responses = responses::Responses;
+    async fn bind(_: &Components) -> anyhow::Result<Bind<Self, R>> {
         let greetings = Greetings::watch().await?;
         let this = Self {
             greetings,
             uptime: Instant::now(),
         };
-
-        Bind::create::<responses::Responses>(this)?
+        Bind::create(this)?
             .bind(Self::ping)?
             .bind(Self::hello)?
             .bind(Self::time)?
@@ -99,7 +97,9 @@ impl Builtin {
             .bind(Self::version)?
             .listen(Self::say_hello)
     }
+}
 
+impl Builtin {
     fn ping(&mut self, msg: &Message<impl Replier>, args: Arguments) -> impl Outcome {
         let now = OffsetDateTime::now_local()?;
         let ms: Duration = (now - msg.timestamp).try_into()?;

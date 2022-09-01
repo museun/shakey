@@ -8,6 +8,7 @@ build = "build.rs"
 [dependencies]
 alto_logger      = "0.4.0"
 anyhow           = "1.0.62"
+async-trait = "0.1.57"
 fastrand         = "1.8.0"
 fastrand_ext     = { git = "https://github.com/museun/fastrand_ext", version = "0.1.0" }
 heck             = "0.4.0"

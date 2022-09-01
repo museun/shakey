@@ -1,7 +1,11 @@
 use std::collections::HashMap;
 
 use crate::{
-    data::Interest, ext::IterExt, handler::Components, irc::Message, responses::RequiresPermission,
+    data::Interest,
+    ext::IterExt,
+    handler::{Bindable, Components},
+    irc::Message,
+    responses::RequiresPermission,
     Arguments, Bind, Outcome, Replier,
 };
 
@@ -108,17 +112,25 @@ pub struct UserDefined {
     commands: Commands,
 }
 
-impl UserDefined {
-    pub async fn bind<R: Replier>(_: Components) -> anyhow::Result<Bind<Self, R>> {
-        let commands = crate::data::load_yaml().await?;
-        Bind::create::<responses::Responses>(Self { commands })?
+#[async_trait::async_trait]
+impl<R: Replier> Bindable<R> for UserDefined {
+    type Responses = responses::Responses;
+
+    async fn bind(_: &Components) -> anyhow::Result<Bind<Self, R>> {
+        let this = Self {
+            commands: crate::data::load_yaml().await?,
+        };
+
+        Bind::create(this)?
             .bind(Self::add)?
             .bind(Self::update)?
             .bind(Self::remove)?
             .bind(Self::commands)?
             .listen(Self::listen)
     }
+}
 
+impl UserDefined {
     // TODO support !alias
 
     fn add(&mut self, msg: &Message<impl Replier>, mut args: Arguments) -> impl Outcome {

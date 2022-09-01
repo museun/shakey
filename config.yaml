@@ -1,8 +1,10 @@
-helix_client_id: SHAKEN_TWITCH_CLIENT_ID
-helix_client_secret: SHAKEN_TWITCH_CLIENT_SECRET
+helix:
+  client_id: SHAKEN_TWITCH_CLIENT_ID
+  client_secret: SHAKEN_TWITCH_CLIENT_SECRET
 
-spotify_client_id: SHAKEN_SPOTIFY_CLIENT_ID
-spotify_client_secret: SHAKEN_SPOTIFY_CLIENT_SECRET
+spotify:
+  client_id: SHAKEN_SPOTIFY_CLIENT_ID
+  client_secret: SHAKEN_SPOTIFY_CLIENT_SECRET
 
-settings_gist_id: SHAKEN_SETTINGS_GIST_ID
-github_oauth_token: SHAKEN_GITHUB_OAUTH_TOKEN
+github:
+  oauth_token: SHAKEN_GITHUB_OAUTH_TOKEN

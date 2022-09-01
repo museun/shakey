@@ -1,15 +1,16 @@
-pub mod handler;
+#[macro_use]
+pub mod templates;
 
-use config::Secret;
+use handler::Components;
+pub use templates::{BorrowedEnv, Environment, RegisterResponse, Templates};
+
+pub mod handler;
 pub use handler::{
     Arguments, Bind, Callable, Commands, MaybeTask, Outcome, Replier, Reply, Response,
 };
 
-#[macro_use]
-pub mod templates;
-pub use templates::{BorrowedEnv, Environment, RegisterResponse, Templates};
+pub mod env;
 
-pub mod config;
 pub mod data;
 pub mod ext;
 pub mod global;
@@ -26,23 +27,51 @@ pub use util::{get_env_var, watch_file};
 mod testing;
 pub use testing::mock;
 
-#[derive(::serde::Deserialize)]
-pub struct Config {
-    pub helix_client_id: Secret,
-    pub helix_client_secret: Secret,
+mod github;
+mod spotify;
 
-    pub spotify_client_id: Secret,
-    pub spotify_client_secret: Secret,
+pub mod config;
 
-    pub settings_gist_id: Secret,
-    pub github_oauth_token: Secret,
-}
+pub async fn register_components(config: &crate::config::Config) -> anyhow::Result<Components> {
+    use crate::github::GistClient;
+    use crate::helix::{EmoteMap, HelixClient, OAuth};
+    use crate::spotify::SpotifyClient;
+    use std::sync::Arc;
 
-impl Config {
-    pub async fn load(path: &str) -> anyhow::Result<Self> {
-        let data = tokio::fs::read_to_string(path).await?;
-        serde_yaml::from_str(&data).map_err(Into::into)
-    }
+    let helix_client = OAuth::create(
+        &config.helix.client_id, //
+        &config.helix.client_secret,
+    )
+    .await
+    .map(HelixClient::new)?;
+
+    let emote_map = helix_client
+        .get_global_emotes()
+        .await
+        .map(|(_, map)| {
+            map.iter()
+                .map(|emote| (&*emote.name, &*emote.id))
+                .fold(EmoteMap::default(), |map, (name, id)| {
+                    map.with_emote(name, id)
+                })
+        })
+        .map(Arc::new)?;
+
+    let spotify_client = SpotifyClient::new(
+        &config.spotify.client_id, //
+        &config.spotify.client_secret,
+    )
+    .await?;
+
+    let gist_client = GistClient::new(
+        &config.github.oauth_token, //
+    );
+
+    Ok(Components::default() //
+        .register(helix_client)
+        .register(emote_map)
+        .register(spotify_client)
+        .register(gist_client))
 }
 
 crate::make_response! {

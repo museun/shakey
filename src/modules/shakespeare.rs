@@ -4,7 +4,11 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use tokio::time::Instant;
 
-use crate::{handler::Components, irc::Message, Arguments, Bind, Outcome, Replier};
+use crate::{
+    handler::{Bindable, Components},
+    irc::Message,
+    Arguments, Bind, Outcome, Replier,
+};
 
 crate::make_response! {
     module: "shakespeare"
@@ -20,9 +24,11 @@ pub struct Shakespeare {
     cooldown: Duration,
 }
 
-impl Shakespeare {
-    pub async fn bind<R: Replier>(_: Components) -> anyhow::Result<Bind<Self, R>> {
-        Bind::create::<responses::Responses>(Self {
+#[async_trait::async_trait]
+impl<R: Replier> Bindable<R> for Shakespeare {
+    type Responses = responses::Responses;
+    async fn bind(_: &Components) -> anyhow::Result<Bind<Self, R>> {
+        Bind::create(Self {
             last: None,
             chance: 0.30,
             cooldown: Duration::from_secs(30),
@@ -30,7 +36,9 @@ impl Shakespeare {
         .bind(Self::speak)?
         .listen(Self::listen)
     }
+}
 
+impl Shakespeare {
     fn speak(&mut self, msg: &Message<impl Replier>, _: Arguments) -> impl Outcome {
         let msg = msg.clone();
         tokio::spawn(async move {
