@@ -67,8 +67,8 @@ impl Greetings {
 }
 
 impl Interest for Greetings {
-    fn module() -> &'static str {
-        "builtin"
+    fn module() -> Option<&'static str> {
+        Some("builtin")
     }
     fn file() -> &'static str {
         "greetings.yaml"

@@ -12,7 +12,7 @@ mod parsed;
 use parsed::Parsed;
 
 mod verify;
-pub use verify::add_to_registry;
+pub use verify::{add_to_registry, reset_registry};
 
 use crate::{data::Interest, handler::Response};
 
@@ -35,8 +35,8 @@ pub struct Templates {
 }
 
 impl Interest for Templates {
-    fn module() -> &'static str {
-        "shakey"
+    fn module() -> Option<&'static str> {
+        None
     }
 
     fn file() -> &'static str {

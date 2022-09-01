@@ -1,0 +1,93 @@
+system:
+  command_error:
+    default: 'oops something happened: ${error}'
+  invalid_usage:
+    default: "invalid arguments: ${usage}"
+  requires_permission:
+    default: "that requires you to be a moderator or the broadcaster"
+
+builtin:
+  hello:
+    default: "${greeting}, ${sender}!"
+  ping:
+    default: "pong: ${time}"
+  ping_with_token:
+    default: "pong: ${time} (token: ${token})"
+  time:
+    default: "the current time for the bot is: ${now}"
+  bot_uptime:
+    default: "the bot has been running for ${uptime}"
+  version:
+    default: "${revision} on branch `${branch}` built at: ${build_time}"
+  say_hello:
+    default: "${greeting}, ${sender}."
+
+twitch:
+  viewers:
+    default: "${name} has ${viewers} viewers"
+  uptime:
+    default: "${name} has been streaming for: ${uptime}"
+  not_streaming:
+    default: "I don't think \"${channel}\" is streaming"
+
+spotify:
+  current_song:
+    default: "${artist} - ${title} @ ${link}"
+  previous_song:
+    default: "${artist} - ${title} @ ${link}"
+  not_playing:
+    default: "I don't think spotify is playing music"
+  demo:
+    default: "${msg}"
+
+crates:
+  crate:
+    default: "${name} = ${version} | ${description}\ndocs: ${docs} | repo: ${repo}\nlast updated: ${updated} ago"
+  crate_best_match:
+    default: "my best match: ${name} = ${version} | ${description}\ndocs: ${docs} | repo: ${repo}\nlast updated: ${updated} ago"
+  not_found:
+    default: "I couldn't find anything for ${query}"
+
+vscode:
+  theme:
+    default: "${variant} from ${theme_url}"
+  fonts:
+    default: "editor is using '${editor}' and the terminal is using '${terminal}'"
+
+help:
+  list_commands:
+    default: "${commands}"
+  specific_command:
+    # what a hack, this | has to be next to it
+    default: "command: ${command} ${usage}| ${description}\naliases: ${aliases}"
+  specific_command_no_alias:
+    # what a hack, this | has to be next to it
+    default: "command: ${command} ${usage}| ${description}"
+  unknown_command:
+    default: "I don't know what ${command} does"
+
+user_defined:
+  commands:
+    default: "${commands}"
+  command:
+    default: "${body}"
+  updated:
+    default: "updated ${command} -> ${body}"
+  added:
+    default: "added ${command} -> ${body}"
+  removed:
+    default: "removed ${command} -> ${body}"
+  command_exists:
+    default: "${command} already exists"
+  command_not_found:
+    default: "${command} wasn't found"
+  invalid_syntax:
+    default: "invalid syntax: ${error}"
+
+another_viewer:
+  respond:
+    default: "${data}"
+
+shakespeare:
+  respond:
+    default: "${data}"

@@ -14,6 +14,10 @@ struct ResponseRegistry {
 static RESPONSE_REGISTRY: Lazy<Mutex<ResponseRegistry>> =
     Lazy::new(|| Mutex::new(ResponseRegistry::default()));
 
+pub fn reset_registry() {
+    std::mem::take(&mut *RESPONSE_REGISTRY.lock());
+}
+
 pub fn add_to_registry<T>() -> anyhow::Result<()>
 where
     T: Response + Default + Serialize + 'static,

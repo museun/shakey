@@ -4,13 +4,16 @@ use std::{future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use shakey::{
     config::Config,
-    data::{BoxedFuture, Interest},
+    data::Interest,
     ext::FutureExt,
+    get_env_var,
     global::{Global, GlobalItem},
     handler::{Bindable, BoxedCallable, Components},
-    irc, Commands, Replier, Templates,
+    irc,
+    templates::reset_registry,
+    Commands, Replier, Templates,
 };
-use tokio::{sync::Notify, task::JoinHandle};
+use tokio::task::JoinHandle;
 
 async fn initialize<T>(
     stop: impl Future<Output = ()> + Send + 'static,
@@ -28,13 +31,14 @@ where
         Global<'static, T>:,
         T: GlobalItem,
     {
-        let this = shakey::data::load_yaml().await?;
-        T::get_static().reset();
+        let data = tokio::fs::read_to_string(&path).await?;
+        let this = serde_yaml::from_str(&data)?;
         T::get_static().initialize(Arc::new(this));
         Ok(())
     }
 
-    let path = shakey::data::get_data_path::<T>()?;
+    let config_root = get_env_var("SHAKEN_CONFIG_DIR").map(PathBuf::from)?;
+    let path = T::get_path(&config_root);
     reload::<T>(path.clone()).await?;
 
     Ok(tokio::spawn(async move {
@@ -81,6 +85,8 @@ impl<'a, R: Replier> Modules<'a, R> {
 #[rustfmt::skip]
 async fn bind_modules<R: Replier>(components: & Components) -> anyhow::Result<Vec<BoxedCallable<R>>> {
     use shakey::modules::*;
+
+    reset_registry();
     Ok(Modules::<R>::new(components)
         .add::<Builtin>().await?
         .add::<Twitch>().await?
@@ -97,16 +103,16 @@ async fn bind_modules<R: Replier>(components: & Components) -> anyhow::Result<Ve
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     simple_env_load::load_env_from([".dev.env", ".secrets.env"]);
-    alto_logger::init_term_logger()?;
+    alto_logger::init_alt_term_logger()?;
 
     let config = Config::load("config.yaml").await?;
     let components = shakey::register_components(&config).await?;
 
     loop {
-        let (notified, notifier) = notify();
+        let notify = Notify::new();
 
-        let commands_task = initialize::<Commands>(notified()).await?;
-        let templates_task = initialize::<Templates>(notified()).await?;
+        let commands_task = initialize::<Commands>(notify.notifier()).await?;
+        let templates_task = initialize::<Templates>(notify.notifier()).await?;
 
         let modules = bind_modules(&components).await?;
 
@@ -127,7 +133,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
 
-            notifier();
+            notify.notify().await;
             let _ = tokio::join!(commands_task, templates_task,);
 
             log::warn!("reconnecting in 5 seconds");
@@ -136,28 +142,25 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
-fn notify() -> (impl Fn() -> BoxedFuture<'static, ()>, impl FnOnce()) {
-    let notify = Arc::new(Notify::new());
-    (
-        {
-            let notify = notify.clone();
-            move || {
-                let notify = notify.clone();
-                Box::pin(async move { notify.notified().await })
-            }
-        },
-        move || notify.notify_waiters(),
-    )
+struct Notify {
+    sender: flume::Sender<()>,
+    recv: flume::Receiver<()>,
 }
 
-#[cfg(not(debug_assertions))]
-const _: () = {
-    include_str!("commands.yaml");
-};
+impl Notify {
+    fn new() -> Self {
+        let (sender, recv) = flume::bounded(0);
+        Self { sender, recv }
+    }
 
-#[cfg(not(debug_assertions))]
-const _: () = {
-    include_str!("templates.yaml");
-};
+    fn notifier(&self) -> impl Future<Output = ()> {
+        let recv = self.recv.clone();
+        async move {
+            let _ = recv.recv_async().await;
+        }
+    }
 
-// BUG EXTRA TODO (really read this one) provide default commands/templates.yaml
+    async fn notify(self) {
+        let _ = self.sender.into_send_async(()).await;
+    }
+}

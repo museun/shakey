@@ -10,35 +10,6 @@ use tokio::sync::{RwLock, RwLockMappedWriteGuard, RwLockReadGuard, RwLockWriteGu
 
 use crate::{get_env_var, util::watch_file};
 
-pub async fn save_yaml<T: Interest>(val: &T) -> anyhow::Result<()>
-where
-    T: serde::Serialize + Send + Sync,
-{
-    let data = serde_yaml::to_string(val)?;
-    let root = get_env_var("SHAKEN_DATA_DIR").map(PathBuf::from)?;
-    tokio::fs::write(T::get_path(&root), data)
-        .await
-        .map_err(Into::into)
-}
-
-pub async fn save_json<T: Interest>(val: &T) -> anyhow::Result<()>
-where
-    T: serde::Serialize + Send + Sync,
-{
-    let data = serde_json::to_string(val)?;
-    let root = get_env_var("SHAKEN_DATA_DIR").map(PathBuf::from)?;
-    tokio::fs::write(T::get_path(&root), data)
-        .await
-        .map_err(Into::into)
-}
-
-async fn load_data<T: Interest>() -> anyhow::Result<String> {
-    let root = get_env_var("SHAKEN_DATA_DIR").map(PathBuf::from)?;
-    tokio::fs::read_to_string(T::get_path(&root))
-        .await
-        .map_err(Into::into)
-}
-
 pub fn get_data_path<T>() -> anyhow::Result<PathBuf>
 where
     T: Interest,
@@ -46,25 +17,42 @@ where
     get_env_var("SHAKEN_DATA_DIR").map(PathBuf::from)
 }
 
+pub async fn save_yaml<T: Interest>(val: &T) -> anyhow::Result<()>
+where
+    T: serde::Serialize + Send + Sync,
+{
+    let root = get_env_var("SHAKEN_DATA_DIR").map(PathBuf::from)?;
+    save_yaml_to(val, &root).await
+}
+
+pub async fn save_yaml_to<T: Interest>(val: &T, root: &Path) -> anyhow::Result<()>
+where
+    T: serde::Serialize + Send + Sync,
+{
+    let data = serde_yaml::to_string(val)?;
+    tokio::fs::write(T::get_path(&root), data).await?;
+    Ok(())
+}
+
 pub async fn load_yaml<T>() -> anyhow::Result<T>
 where
     T: Interest + for<'de> serde::Deserialize<'de>,
 {
-    serde_yaml::from_str(&load_data::<T>().await?).map_err(Into::into)
+    load_yaml_from(&get_data_path::<T>()?).await
 }
 
-pub async fn load_json<T>() -> anyhow::Result<T>
+pub async fn load_yaml_from<T>(root: &Path) -> anyhow::Result<T>
 where
     T: Interest + for<'de> serde::Deserialize<'de>,
 {
-    serde_json::from_str(&load_data::<T>().await?).map_err(Into::into)
+    let data = tokio::fs::read_to_string(T::get_path(&root)).await?;
+    serde_yaml::from_str(&data).map_err(Into::into)
 }
 
 pub struct FileTypes;
 
 impl FileTypes {
     pub const YAML: u8 = 1;
-    pub const JSON: u8 = 2;
 
     pub async fn load<T, const FORMAT: u8>() -> anyhow::Result<T>
     where
@@ -72,7 +60,6 @@ impl FileTypes {
     {
         match FORMAT {
             1 => load_yaml::<T>().await,
-            2 => load_json::<T>().await,
             _ => anyhow::bail!("unsupported format"),
         }
     }
@@ -83,7 +70,6 @@ impl FileTypes {
     {
         match FORMAT {
             1 => save_yaml(val).await,
-            2 => save_json(val).await,
             _ => anyhow::bail!("unsupported format"),
         }
     }
@@ -164,7 +150,6 @@ where
         Box::pin(async move {
             let this = FileTypes::load::<_, FORMAT>().await?;
             let saved = SaveFile::<_, FORMAT>(Arc::new(RwLock::new(this)));
-
             Ok(saved)
         })
     }
@@ -215,10 +200,13 @@ where
 }
 
 pub trait Interest {
-    fn module() -> &'static str;
+    fn module() -> Option<&'static str>;
     fn file() -> &'static str;
 
     fn get_path(root: &Path) -> PathBuf {
-        root.join(Self::module()).join(Self::file())
+        Self::module()
+            .map(|module| root.join(module))
+            .unwrap_or_else(|| root.to_path_buf())
+            .join(Self::file())
     }
 }

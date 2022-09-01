@@ -62,8 +62,8 @@ struct Commands {
 }
 
 impl Interest for Commands {
-    fn module() -> &'static str {
-        "user_defined"
+    fn module() -> Option<&'static str> {
+        Some("user_defined")
     }
 
     fn file() -> &'static str {

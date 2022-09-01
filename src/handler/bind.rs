@@ -64,10 +64,10 @@ where
         F: Copy + 'static,
     {
         let (module, key) = Self::make_keyable::<F>();
+        log::trace!("adding handler: {module}.{key}");
         Commands::get()
             .find(&module, &key)
             .with_context(|| anyhow::anyhow!("cannot find {module}.{key}"))?;
-        log::debug!("adding handler: {module}.{key}");
 
         let this = Arc::clone(&self.this);
         let this = move |msg: &irc::Message<R>| {
@@ -209,8 +209,8 @@ pub struct Commands {
 }
 
 impl Interest for Commands {
-    fn module() -> &'static str {
-        "shakey"
+    fn module() -> Option<&'static str> {
+        None
     }
 
     fn file() -> &'static str {
