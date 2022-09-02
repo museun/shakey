@@ -5,7 +5,7 @@ use std::{future::Future, path::PathBuf, sync::Arc, time::Duration};
 use shakey::{
     config::Config,
     data::Interest,
-    ext::FutureExt,
+    ext::{Either, FutureExt},
     get_env_var,
     global::{Global, GlobalItem},
     handler::{Bindable, Components, SharedCallable},
@@ -113,7 +113,6 @@ async fn bind_modules<R: Replier>(
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     simple_env_load::load_env_from([".dev.env", ".secrets.env"]);
-
     alto_logger::init_alt_term_logger()?;
 
     let config = Config::load("config.yaml").await?;
@@ -129,9 +128,15 @@ async fn main() -> anyhow::Result<()> {
 
         // TODO don't do this in the loop
         // OR: shut it down before the next iteration
-        tokio::spawn({
+        let discord = tokio::spawn({
             let modules = modules.clone();
-            async move { shakey::twilight::run(modules).await }
+            let stop = notify.notifier();
+            async move {
+                match stop.select(shakey::twilight::run(modules)).await {
+                    Either::Left(..) => return,
+                    Either::Right(..) => return,
+                }
+            }
         });
 
         if let Err(err) = async move {
@@ -152,7 +157,7 @@ async fn main() -> anyhow::Result<()> {
             }
 
             notify.notify().await;
-            let _ = tokio::join!(commands_task, templates_task,);
+            let _ = tokio::join!(commands_task, templates_task, discord);
 
             log::warn!("reconnecting in 5 seconds");
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;

@@ -133,7 +133,7 @@ impl EmoteMap {
         iter.fold(self, |this, (name, id)| this.with_emote(name, id))
     }
 
-    pub fn with_emote<'k, 'v>(mut self, name: &'k str, id: &'v str) -> Self {
+    pub fn with_emote(mut self, name: &'_ str, id: &'_ str) -> Self {
         self.id_to_name.insert(id.into(), name.into());
         self.name_to_id.insert(name.into(), id.into());
         self.names.insert(name.into());

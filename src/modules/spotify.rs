@@ -19,11 +19,6 @@ crate::make_response! {
         link: String
     } is "previous_song"
 
-
-    struct Demo {
-        msg: String,
-    } is "demo"
-
     struct NotPlaying {
     } is "not_playing"
 }

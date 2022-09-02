@@ -176,10 +176,6 @@ pub mod twilight {
                 None => continue,
             };
 
-            // let msg = self.client.create_message(ch).content(data).map(map)?;
-            // let _ = msg.exec().await;
-            // Ok(())
-
             match resp {
                 Reply::Say(resp) => {
                     if let Ok(ok) = client.create_message(ch_id).content(&resp) {

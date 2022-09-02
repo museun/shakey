@@ -24,19 +24,19 @@ pub enum MessageKind {
 }
 
 pub trait NarrowMessageKind: Sized {
-    fn as_twitch(self) -> Option<crate::irc::Message>;
-    fn as_discord(self) -> Option<inner::Discord>;
+    fn into_twitch(self) -> Option<crate::irc::Message>;
+    fn into_discord(self) -> Option<inner::Discord>;
 }
 
 impl NarrowMessageKind for Arc<MessageKind> {
-    fn as_twitch(self) -> Option<crate::irc::Message> {
+    fn into_twitch(self) -> Option<crate::irc::Message> {
         match self.unwrap_or_clone() {
             MessageKind::Twitch(twitch) => Some(twitch),
             _ => None,
         }
     }
 
-    fn as_discord(self) -> Option<inner::Discord> {
+    fn into_discord(self) -> Option<inner::Discord> {
         match self.unwrap_or_clone() {
             MessageKind::Discord(discord) => Some(discord),
             _ => None,
@@ -187,11 +187,11 @@ impl<R: Replier> Message<R> {
     }
 
     pub fn as_discord(&self) -> Option<inner::Discord> {
-        lookup_message(self.id()).and_then(NarrowMessageKind::as_discord)
+        lookup_message(self.id()).and_then(NarrowMessageKind::into_discord)
     }
 
     pub fn as_twitch(&self) -> Option<crate::irc::Message> {
-        lookup_message(self.id()).and_then(NarrowMessageKind::as_twitch)
+        lookup_message(self.id()).and_then(NarrowMessageKind::into_twitch)
     }
 
     pub fn sender(&self) -> &str {

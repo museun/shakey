@@ -6,7 +6,7 @@ mod variant;
 pub use variant::Variant;
 
 mod environment;
-pub use environment::{BorrowedEnv, Environment, RegisterResponse};
+pub use environment::{BorrowedEnv, Environment, LimitedVec, RegisterResponse};
 
 mod parsed;
 use parsed::Parsed;

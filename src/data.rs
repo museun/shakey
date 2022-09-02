@@ -30,7 +30,7 @@ where
     T: serde::Serialize + Send + Sync,
 {
     let data = serde_yaml::to_string(val)?;
-    tokio::fs::write(T::get_path(&root), data).await?;
+    tokio::fs::write(T::get_path(root), data).await?;
     Ok(())
 }
 
@@ -45,7 +45,7 @@ pub async fn load_yaml_from<T>(root: &Path) -> anyhow::Result<T>
 where
     T: Interest + for<'de> serde::Deserialize<'de>,
 {
-    let data = tokio::fs::read_to_string(T::get_path(&root)).await?;
+    let data = tokio::fs::read_to_string(T::get_path(root)).await?;
     serde_yaml::from_str(&data).map_err(Into::into)
 }
 
