@@ -1,7 +1,7 @@
 use std::{borrow::Cow, time::Duration};
 
 use crate::{
-    data::{FileTypes, Interest, Watch, WatchFile},
+    data::{FileTypes, Interest, InterestPath, Watch, WatchFile},
     ext::FormatTime,
     handler::{Bindable, Components},
     irc::Message,
@@ -67,8 +67,8 @@ impl Greetings {
 }
 
 impl Interest for Greetings {
-    fn module() -> Option<&'static str> {
-        Some("builtin")
+    fn module() -> InterestPath<&'static str> {
+        InterestPath::Nested("builtin")
     }
     fn file() -> &'static str {
         "greetings.yaml"

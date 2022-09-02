@@ -3,3 +3,4 @@
 /data
 /.vscode
 .spotify_token_cache.json
+.exe

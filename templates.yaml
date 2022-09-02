@@ -90,4 +90,4 @@ another_viewer:
 
 shakespeare:
   respond:
-    default: "${data}"
+    default: "~ ${data}"

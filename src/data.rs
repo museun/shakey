@@ -199,14 +199,20 @@ where
     }
 }
 
-pub trait Interest {
-    fn module() -> Option<&'static str>;
+#[non_exhaustive]
+pub enum InterestPath<T> {
+    Nested(T),
+    Root,
+}
+
+pub trait Interest: Default {
+    fn module() -> InterestPath<&'static str>;
     fn file() -> &'static str;
 
     fn get_path(root: &Path) -> PathBuf {
-        Self::module()
-            .map(|module| root.join(module))
-            .unwrap_or_else(|| root.to_path_buf())
-            .join(Self::file())
+        match Self::module() {
+            InterestPath::Nested(path) => root.join(path).join(Self::file()),
+            InterestPath::Root => root.join(Self::file()),
+        }
     }
 }

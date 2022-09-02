@@ -7,8 +7,9 @@ use anyhow::Context;
 use heck::ToSnekCase;
 
 use crate::{
-    data::Interest, global::GlobalItem, irc, responses, Arguments, Callable, Outcome,
-    RegisterResponse, Replier,
+    data::{Interest, InterestPath},
+    global::GlobalItem,
+    irc, responses, Arguments, Callable, Outcome, RegisterResponse, Replier,
 };
 
 use super::{
@@ -209,8 +210,8 @@ pub struct Commands {
 }
 
 impl Interest for Commands {
-    fn module() -> Option<&'static str> {
-        None
+    fn module() -> InterestPath<&'static str> {
+        InterestPath::Root
     }
 
     fn file() -> &'static str {

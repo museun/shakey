@@ -1,10 +1,12 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-use tokio::time::Instant;
+
+use tokio::{sync::Mutex, time::Instant};
 
 use crate::{
+    data::{Interest, InterestPath, Watch, WatchFile},
     handler::{Bindable, Components},
     irc::Message,
     Arguments, Bind, Outcome, Replier,
@@ -19,19 +21,50 @@ crate::make_response! {
 }
 
 pub struct Shakespeare {
-    last: Option<Instant>,
+    last: Arc<Mutex<Option<Instant>>>,
+    config: WatchFile<Config>,
+}
+
+#[derive(serde::Deserialize)]
+struct Config {
+    brain_address: Box<str>,
+    min_words: usize,
+    max_words: usize,
     chance: f32,
+    #[serde(deserialize_with = "crate::serde::simple_human_time")]
     cooldown: Duration,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            brain_address: Box::from("http://localhost:10000"),
+            min_words: 5,
+            max_words: 10,
+            chance: 0.30,
+            cooldown: Duration::from_secs(60),
+        }
+    }
+}
+
+impl Interest for Config {
+    fn module() -> InterestPath<&'static str> {
+        InterestPath::Nested("shakespeare")
+    }
+
+    fn file() -> &'static str {
+        "config.yaml"
+    }
 }
 
 #[async_trait::async_trait]
 impl<R: Replier> Bindable<R> for Shakespeare {
     type Responses = responses::Responses;
     async fn bind(_: &Components) -> anyhow::Result<Bind<Self, R>> {
+        let config = Config::watch().await?;
         Bind::create(Self {
-            last: None,
-            chance: 0.30,
-            cooldown: Duration::from_secs(30),
+            last: <Arc<Mutex<Option<_>>>>::default(),
+            config,
         })?
         .bind(Self::speak)?
         .listen(Self::listen)
@@ -41,8 +74,9 @@ impl<R: Replier> Bindable<R> for Shakespeare {
 impl Shakespeare {
     fn speak(&mut self, msg: &Message<impl Replier>, _: Arguments) -> impl Outcome {
         let msg = msg.clone();
+        let config = self.config.clone();
         tokio::spawn(async move {
-            match Self::generate().await {
+            match Self::generate(config).await {
                 Ok(data) => msg.say(responses::Respond { data }),
                 Err(err) => log::error!("cannot generate response: {err}"),
             }
@@ -58,25 +92,27 @@ impl Shakespeare {
             return;
         }
 
-        if fastrand::f32() < self.chance {
-            return;
-        }
+        let last = self.last.clone();
+        let msg = msg.clone();
+        let config = self.config.clone();
 
-        if self.last.is_none()
-            || self
-                .last
-                .filter(|last| last.elapsed() >= self.cooldown)
-                .is_some()
-        {
-            self.last.replace(Instant::now());
-            let msg = msg.clone();
-            tokio::spawn(async move {
-                match Self::generate().await {
+        tokio::spawn(async move {
+            let c = config.get().await;
+            if fastrand::f32() < c.chance {
+                return;
+            }
+
+            let mut g = last.lock().await;
+            if g.is_none() || g.filter(|last| last.elapsed() >= c.cooldown).is_some() {
+                g.replace(Instant::now());
+                drop(c);
+
+                match Self::generate(config).await {
                     Ok(data) => msg.say(responses::Respond { data }),
                     Err(err) => log::error!("cannot generate response: {err}"),
                 }
-            });
-        }
+            }
+        });
     }
 
     fn try_mention(&mut self, msg: &Message<impl Replier>) -> bool {
@@ -88,10 +124,12 @@ impl Shakespeare {
             .split_ascii_whitespace()
             .any(|part| NAME_PATTERN.is_match(part))
         {
-            self.last.replace(Instant::now());
             let msg = msg.clone();
+            let config = self.config.clone();
+            let last = self.last.clone();
             tokio::spawn(async move {
-                match Self::generate().await {
+                last.lock().await.replace(Instant::now());
+                match Self::generate(config).await {
                     Ok(data) => msg.reply(responses::Respond { data }),
                     Err(err) => log::error!("cannot generate response: {err}"),
                 }
@@ -102,7 +140,7 @@ impl Shakespeare {
         false
     }
 
-    async fn generate() -> anyhow::Result<String> {
+    async fn generate(config: WatchFile<Config>) -> anyhow::Result<String> {
         #[derive(serde::Serialize)]
         struct Query {
             min: usize,
@@ -114,9 +152,19 @@ impl Shakespeare {
             data: String,
         }
 
+        let (url, query) = {
+            let config = config.get().await;
+            let url = format!("{}/generate", config.brain_address);
+            let query = Query {
+                min: config.min_words,
+                max: config.max_words,
+            };
+            (url, query)
+        };
+
         let resp: Response = reqwest::Client::new()
-            .get("http://localhost:10000/generate") // TODO get this from the components
-            .json(&Query { min: 5, max: 50 })
+            .get(url)
+            .json(&query)
             .send()
             .await?
             .json()

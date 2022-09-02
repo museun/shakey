@@ -14,7 +14,10 @@ use parsed::Parsed;
 mod verify;
 pub use verify::{add_to_registry, reset_registry};
 
-use crate::{data::Interest, handler::Response};
+use crate::{
+    data::{Interest, InterestPath},
+    handler::Response,
+};
 
 #[derive(Debug, serde::Deserialize)]
 struct Module {
@@ -35,8 +38,8 @@ pub struct Templates {
 }
 
 impl Interest for Templates {
-    fn module() -> Option<&'static str> {
-        None
+    fn module() -> InterestPath<&'static str> {
+        InterestPath::Root
     }
 
     fn file() -> &'static str {

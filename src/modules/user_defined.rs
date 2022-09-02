@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    data::Interest,
+    data::{Interest, InterestPath},
     ext::IterExt,
     handler::{Bindable, Components},
     irc::Message,
@@ -62,8 +62,8 @@ struct Commands {
 }
 
 impl Interest for Commands {
-    fn module() -> Option<&'static str> {
-        Some("user_defined")
+    fn module() -> InterestPath<&'static str> {
+        InterestPath::Nested("user_defined")
     }
 
     fn file() -> &'static str {

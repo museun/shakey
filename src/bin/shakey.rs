@@ -103,6 +103,7 @@ async fn bind_modules<R: Replier>(components: & Components) -> anyhow::Result<Ve
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     simple_env_load::load_env_from([".dev.env", ".secrets.env"]);
+
     alto_logger::init_alt_term_logger()?;
 
     let config = Config::load("config.yaml").await?;
