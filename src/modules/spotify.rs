@@ -1,8 +1,7 @@
 use crate::{
     handler::{Bindable, Components},
-    irc,
     spotify::{Song, SpotifyClient},
-    Arguments, Bind, Outcome, Replier,
+    Arguments, Bind, Message, Outcome, Replier,
 };
 
 crate::make_response! {
@@ -47,7 +46,7 @@ impl<R: Replier> Bindable<R> for Spotify {
 }
 
 impl Spotify {
-    fn current_song(&mut self, msg: &irc::Message<impl Replier>, _: Arguments) -> impl Outcome {
+    fn current_song(&mut self, msg: &Message<impl Replier>, _: Arguments) -> impl Outcome {
         let msg = msg.clone();
         let client = self.client.clone();
         tokio::spawn(async move {
@@ -70,7 +69,7 @@ impl Spotify {
         })
     }
 
-    fn previous_song(&mut self, msg: &irc::Message<impl Replier>, _: Arguments) -> impl Outcome {
+    fn previous_song(&mut self, msg: &Message<impl Replier>, _: Arguments) -> impl Outcome {
         let msg = msg.clone();
         let client = self.client.clone();
         tokio::spawn(async move {

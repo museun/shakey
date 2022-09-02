@@ -1,8 +1,16 @@
 system:
   command_error:
-    default: 'oops something happened: ${error}'
+    default: "oops something happened: ${error}"
+    discord: |-
+      ***oops*** something happened:
+      ```
+      ${error}
+      ```
+
   invalid_usage:
     default: "invalid arguments: ${usage}"
+    discord: "invalid arguments: **usage**: `${usage}`"
+
   requires_permission:
     default: "that requires you to be a moderator or the broadcaster"
 
@@ -11,48 +19,99 @@ builtin:
     default: "${greeting}, ${sender}!"
   ping:
     default: "pong: ${time}"
+    discord: "pong: `${time}`"
+
   ping_with_token:
     default: "pong: ${time} (token: ${token})"
+    discord: "pong: `${time}` (token: *${token}*)"
+
   time:
     default: "the current time for the bot is: ${now}"
+    discord: "the current time for the bot is: `${now}`"
+
   bot_uptime:
     default: "the bot has been running for ${uptime}"
+    discord: "the bot has been running for `${uptime}`"
+
   version:
     default: "${revision} on branch `${branch}` built at: ${build_time}"
+    discord: |-
+      **revision**: `${revision}`
+      **branch**: `${branch}`
+      **built at**: `${build_time}`
+
   say_hello:
     default: "${greeting}, ${sender}."
 
 twitch:
   viewers:
     default: "${name} has ${viewers} viewers"
+    discord: "<https://twitch.tv/${name}> has `${viewers}` viewers"
+
   uptime:
     default: "${name} has been streaming for: ${uptime}"
+    discord: "<https://twitch.tv/${name}> has been streaming for *${uptime}*"
+
   not_streaming:
     default: "I don't think \"${channel}\" is streaming"
+    discord: "I don't think `${channel}` is streaming"
 
 spotify:
   current_song:
     default: "${artist} - ${title} @ ${link}"
+    discord: "${link}"
+
   previous_song:
     default: "${artist} - ${title} @ ${link}"
+    discord: "${link}"
+
   not_playing:
     default: "I don't think spotify is playing music"
-  demo:
-    default: "${msg}"
 
 crates:
   crate:
-    default: "${name} = ${version} | ${description}\ndocs: ${docs} | repo: ${repo}\nlast updated: ${updated} ago"
+    default: |-
+      ${name} = ${version} | ${description}
+      docs: ${docs} | repo: ${repo}
+      last updated: ${updated} ago
+
+    discord: |-
+      ```toml
+      ${name} = ${version}
+      ```
+      **description**: ${description}
+      **docs**: <${docs}>
+      **repo**: <${repo}>
+      **last update**: `${updated}` ago
+
   crate_best_match:
-    default: "my best match: ${name} = ${version} | ${description}\ndocs: ${docs} | repo: ${repo}\nlast updated: ${updated} ago"
+    default: |-
+      my best match: ${name} = ${version} | ${description}
+      docs: ${docs} | repo: ${repo}
+      last updated: ${updated} ago
+
+    discord: |-
+      my best match for that:
+      ```toml
+      ${name} = ${version}
+      ```
+      **description**: ${description}
+      **docs**: <${docs}>
+      **repo**: <${repo}>
+      **last update**: `${updated}` ago
+
   not_found:
     default: "I couldn't find anything for ${query}"
+    discord: "I couldn't find anything for `${query}`"
 
 vscode:
   theme:
     default: "${variant} from ${theme_url}"
+    discord: "**${variant}** from <${theme_url}>"
+
   fonts:
     default: "editor is using '${editor}' and the terminal is using '${terminal}'"
+    discord: "editor is using **${editor}** and the terminal is using **${terminal}**"
 
 help:
   list_commands:
@@ -60,11 +119,21 @@ help:
   specific_command:
     # what a hack, this | has to be next to it
     default: "command: ${command} ${usage}| ${description}\naliases: ${aliases}"
+    discord: |-
+      **command**: `${command} ${usage}`
+      **description**: ${description}
+      **aliases**: ${aliases}
+
   specific_command_no_alias:
     # what a hack, this | has to be next to it
     default: "command: ${command} ${usage}| ${description}"
+    discord: |-
+      **command**: `${command} ${usage}`
+      **description**: ${description}
+
   unknown_command:
     default: "I don't know what ${command} does"
+    discord: "I don't know what `${command}` does"
 
 user_defined:
   commands:

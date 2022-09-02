@@ -1,10 +1,27 @@
 use std::{
     future::Future,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 
 use time::OffsetDateTime;
+
+pub trait ArcExt<T>
+where
+    T: Clone,
+{
+    fn unwrap_or_clone(self) -> T;
+}
+
+impl<T: Clone> ArcExt<T> for Arc<T> {
+    fn unwrap_or_clone(self) -> T {
+        match Arc::try_unwrap(self) {
+            Ok(this) => this,
+            Err(inner) => (*inner).clone(),
+        }
+    }
+}
 
 pub trait IterExt
 where

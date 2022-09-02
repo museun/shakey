@@ -4,9 +4,8 @@ use crate::{
     data::{Interest, InterestPath},
     ext::IterExt,
     handler::{Bindable, Components},
-    irc::Message,
     responses::RequiresPermission,
-    Arguments, Bind, Outcome, Replier,
+    Arguments, Bind, Message, Outcome, Replier,
 };
 
 crate::make_response! {

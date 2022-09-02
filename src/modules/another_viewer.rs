@@ -3,8 +3,7 @@ use std::sync::Arc;
 use crate::{
     handler::{Bindable, Components},
     helix::EmoteMap,
-    irc::Message,
-    Bind, Replier,
+    Bind, Message, Replier,
 };
 
 crate::make_response! {

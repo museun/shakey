@@ -7,8 +7,7 @@ use tokio::{sync::Mutex, time::Instant};
 use crate::{
     data::{Interest, InterestPath, Watch, WatchFile},
     handler::{Bindable, Components},
-    irc::Message,
-    Arguments, Bind, Outcome, Replier,
+    Arguments, Bind, Message, Outcome, Replier,
 };
 
 crate::make_response! {

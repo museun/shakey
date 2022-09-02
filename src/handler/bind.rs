@@ -9,15 +9,15 @@ use heck::ToSnekCase;
 use crate::{
     data::{Interest, InterestPath},
     global::GlobalItem,
-    irc, responses, Arguments, Callable, Outcome, RegisterResponse, Replier,
+    responses, Arguments, Message, Outcome, RegisterResponse, Replier,
 };
 
 use super::{
     arguments::{ExampleArgs, Match},
-    Bindable,
+    Bindable, SharedCallable,
 };
 
-type BoxedHandler<R> = Box<dyn Fn(&irc::Message<R>) + Send + Sync>;
+type BoxedHandler<R> = Box<dyn Fn(&Message<R>) + Send + Sync>;
 
 pub struct Bind<T, R>
 where
@@ -26,20 +26,6 @@ where
 {
     this: Arc<parking_lot::Mutex<T>>,
     handlers: Vec<BoxedHandler<R>>,
-}
-
-impl<T, R> Callable<irc::Message<R>> for Bind<T, R>
-where
-    T: Send + Sync + 'static,
-    R: Replier + 'static,
-{
-    type Outcome = ();
-
-    fn call_func(&mut self, msg: &irc::Message<R>) -> Self::Outcome {
-        for handlers in &mut self.handlers {
-            (handlers)(msg);
-        }
-    }
 }
 
 impl<T, R> Bind<T, R>
@@ -61,7 +47,7 @@ where
     pub fn bind<O, F>(mut self, handler: F) -> anyhow::Result<Self>
     where
         O: Outcome + 'static,
-        F: Fn(&mut T, &irc::Message<R>, Arguments) -> O + Send + Sync + 'static,
+        F: Fn(&mut T, &Message<R>, Arguments) -> O + Send + Sync + 'static,
         F: Copy + 'static,
     {
         let (module, key) = Self::make_keyable::<F>();
@@ -71,7 +57,7 @@ where
             .with_context(|| anyhow::anyhow!("cannot find {module}.{key}"))?;
 
         let this = Arc::clone(&self.this);
-        let this = move |msg: &irc::Message<R>| {
+        let this = move |msg: &Message<R>| {
             let cmd = Commands::get();
             let cmd = cmd.find(&module, &key).expect("command should exist");
 
@@ -110,10 +96,10 @@ where
     pub fn listen<O, F>(mut self, handler: F) -> anyhow::Result<Self>
     where
         O: Outcome + 'static,
-        F: Fn(&mut T, &irc::Message<R>) -> O + Send + Sync + 'static + Copy,
+        F: Fn(&mut T, &Message<R>) -> O + Send + Sync + 'static + Copy,
     {
         let this = Arc::clone(&self.this);
-        let this = move |msg: &irc::Message<R>| {
+        let this = move |msg: &Message<R>| {
             let this = &mut *this.lock();
             if let Some(error) = handler(this, msg).into_error() {
                 msg.problem(responses::Error { error })
@@ -124,11 +110,16 @@ where
         Ok(self)
     }
 
-    pub fn into_callable(self) -> Box<dyn Callable<irc::Message<R>, Outcome = ()>> {
-        Box::new(self) as _
+    pub fn into_callable(self) -> SharedCallable<R> {
+        Arc::new(move |msg: crate::Message<R>| {
+            for handler in &self.handlers {
+                // outcome is always () here
+                (handler)(&msg);
+            }
+        }) as _
     }
 
-    fn parse_command(cmd: &Command, msg: &irc::Message<R>) -> Option<Arguments> {
+    fn parse_command(cmd: &Command, msg: &Message<R>) -> Option<Arguments> {
         if !cmd.has_args() && cmd.is_command_match(&msg.data) {
             return Some(Arguments::default());
         }
@@ -221,15 +212,12 @@ impl Interest for Commands {
 
 impl Commands {
     pub fn find_by_name(&self, query: &str) -> Option<&Command> {
-        self.modules
-            .values()
-            .filter_map(|module| {
-                module
-                    .entries
-                    .values()
-                    .find(|cmd| cmd.command == query || cmd.aliases.contains(query))
-            })
-            .next()
+        self.modules.values().find_map(|module| {
+            module
+                .entries
+                .values()
+                .find(|cmd| cmd.command == query || cmd.aliases.contains(query))
+        })
     }
 
     pub fn command_names(&self) -> impl Iterator<Item = &str> {

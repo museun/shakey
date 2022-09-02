@@ -8,7 +8,7 @@ use shakey::{
     ext::FutureExt,
     get_env_var,
     global::{Global, GlobalItem},
-    handler::{Bindable, BoxedCallable, Components},
+    handler::{Bindable, Components, SharedCallable},
     irc,
     templates::reset_registry,
     Commands, Replier, Templates,
@@ -60,7 +60,7 @@ where
 
 struct Modules<'a, R: Replier> {
     components: &'a Components,
-    inner: Vec<BoxedCallable<R>>,
+    inner: Vec<SharedCallable<R>>,
 }
 
 impl<'a, R: Replier> Modules<'a, R> {
@@ -77,26 +77,36 @@ impl<'a, R: Replier> Modules<'a, R> {
         Ok(self)
     }
 
-    fn into_list(self) -> Vec<BoxedCallable<R>> {
+    fn into_list(self) -> Vec<SharedCallable<R>> {
         self.inner
     }
 }
 
-#[rustfmt::skip]
-async fn bind_modules<R: Replier>(components: & Components) -> anyhow::Result<Vec<BoxedCallable<R>>> {
+async fn bind_modules<R: Replier>(
+    components: &Components,
+) -> anyhow::Result<Vec<SharedCallable<R>>> {
     use shakey::modules::*;
 
     reset_registry();
     Ok(Modules::<R>::new(components)
-        .add::<Builtin>().await?
-        .add::<Twitch>().await?
-        .add::<Spotify>().await?
-        .add::<Crates>().await?
-        .add::<Vscode>().await?
-        .add::<Help>().await?
-        .add::<UserDefined>().await?
-        .add::<AnotherViewer>().await?
-        .add::<Shakespeare>().await?
+        .add::<Builtin>()
+        .await?
+        .add::<Twitch>()
+        .await?
+        .add::<Spotify>()
+        .await?
+        .add::<Crates>()
+        .await?
+        .add::<Vscode>()
+        .await?
+        .add::<Help>()
+        .await?
+        .add::<UserDefined>()
+        .await?
+        .add::<AnotherViewer>()
+        .await?
+        .add::<Shakespeare>()
+        .await?
         .into_list())
 }
 
@@ -107,7 +117,7 @@ async fn main() -> anyhow::Result<()> {
     alto_logger::init_alt_term_logger()?;
 
     let config = Config::load("config.yaml").await?;
-    let components = shakey::register_components(&config).await?;
+    let components = shakey::handler::register_components(&config).await?;
 
     loop {
         let notify = Notify::new();
@@ -116,6 +126,13 @@ async fn main() -> anyhow::Result<()> {
         let templates_task = initialize::<Templates>(notify.notifier()).await?;
 
         let modules = bind_modules(&components).await?;
+
+        // TODO don't do this in the loop
+        // OR: shut it down before the next iteration
+        tokio::spawn({
+            let modules = modules.clone();
+            async move { shakey::twilight::run(modules).await }
+        });
 
         if let Err(err) = async move {
             shakey::irc::run(modules).await?;

@@ -2,8 +2,7 @@ use crate::{
     ext::FormatTime,
     handler::{Bindable, Components},
     helix::{data::Stream, HelixClient},
-    irc::Message,
-    Arguments, Bind, Outcome, Replier,
+    Arguments, Bind, Message, Outcome, Replier,
 };
 use time::OffsetDateTime;
 

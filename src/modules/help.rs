@@ -2,8 +2,7 @@ use crate::{
     ext::IterExt,
     global::GlobalItem,
     handler::{Bindable, Components},
-    irc::Message,
-    Arguments, Bind, Commands, Replier,
+    Arguments, Bind, Commands, Message, Replier,
 };
 
 // TODO get rid of this type
@@ -74,36 +73,42 @@ impl Help {
         const MAX_PER_LINE: usize = 10;
 
         let commands = Commands::get();
-        match args.get("command") {
-            Some(cmd) => match commands.find_by_name(cmd) {
-                Some(cmd) => {
-                    let command = cmd.command.clone();
-                    let usage =
-                        Maybe((!cmd.args.usage.is_empty()).then(|| cmd.args.usage.to_string()));
-                    let description = cmd.description.clone();
-                    if cmd.aliases.is_empty() {
-                        msg.say(responses::SpecificCommandNoAlias {
-                            command,
-                            usage,
-                            description,
-                        })
-                    } else {
-                        let aliases = cmd.aliases.iter().join_with(" ");
-                        msg.say(responses::SpecificCommand {
-                            command,
-                            usage,
-                            description,
-                            aliases,
-                        })
-                    }
-                }
-                None => msg.say(responses::UnknownCommand {
-                    command: cmd.to_string(),
-                }),
-            },
-            None => msg.say(responses::ListCommands {
-                commands: commands.command_names().join_multiline_max(MAX_PER_LINE),
-            }),
+        let cmd = match args.get("command") {
+            Some(cmd) => cmd,
+            None => {
+                let commands = commands.command_names().join_multiline_max(MAX_PER_LINE);
+                msg.say(responses::ListCommands { commands });
+                return;
+            }
+        };
+
+        if let Some(cmd) = commands.find_by_name(cmd) {
+            let usage = Maybe((!cmd.args.usage.is_empty()).then(|| cmd.args.usage.to_string()));
+
+            let command = cmd.command.clone();
+            let description = cmd.description.clone();
+
+            if cmd.aliases.is_empty() {
+                msg.say(responses::SpecificCommandNoAlias {
+                    command,
+                    usage,
+                    description,
+                });
+                return;
+            }
+
+            let aliases = cmd.aliases.iter().join_with(" ");
+            msg.say(responses::SpecificCommand {
+                command,
+                usage,
+                description,
+                aliases,
+            });
+            return;
         }
+
+        msg.say(responses::UnknownCommand {
+            command: cmd.to_string(),
+        })
     }
 }

@@ -64,6 +64,8 @@ vscode:
     description: "tries to get the streamer's VsCode theme"
   fonts:
     command: "!fonts"
+    aliases:
+      - "!font"
     description: "tries to get the streamer's VsCode fonts"
 
 help:

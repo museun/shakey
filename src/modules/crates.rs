@@ -3,8 +3,7 @@ use std::borrow::Cow;
 use crate::{
     ext::DurationSince,
     handler::{Bindable, Components},
-    irc::Message,
-    Arguments, Bind, Outcome, Replier,
+    Arguments, Bind, Message, Outcome, Replier,
 };
 use serde::{Deserialize, Deserializer};
 use time::{format_description::FormatItem, macros::format_description, OffsetDateTime};

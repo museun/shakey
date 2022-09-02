@@ -4,8 +4,7 @@ use crate::{
     get_env_var,
     github::GistClient,
     handler::{Bindable, Components},
-    irc::Message,
-    Arguments, Bind, Outcome, Replier,
+    Arguments, Bind, Message, Outcome, Replier,
 };
 use anyhow::Context;
 

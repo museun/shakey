@@ -4,8 +4,7 @@ use crate::{
     data::{FileTypes, Interest, InterestPath, Watch, WatchFile},
     ext::FormatTime,
     handler::{Bindable, Components},
-    irc::Message,
-    Arguments, Bind, Outcome, Replier,
+    Arguments, Bind, Message, Outcome, Replier,
 };
 use fastrand::Rng;
 use fastrand_ext::SliceExt;

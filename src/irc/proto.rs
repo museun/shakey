@@ -4,12 +4,9 @@ use tokio::{
     sync::mpsc::{Sender, UnboundedReceiver},
 };
 
-use crate::{global::GlobalItem, handler::Reply, Replier, Response, Templates};
+use crate::{global::GlobalItem, handler::Reply, Message, Replier, Response, Templates};
 
-use super::{
-    message::Message,
-    raw::{parse_line, Command, Line},
-};
+use super::raw::{parse_line, Command, Line};
 
 pub fn map_io_err<T>(err: Result<T, std::io::Error>) -> anyhow::Result<T> {
     use std::io::ErrorKind::*;

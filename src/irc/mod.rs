@@ -2,7 +2,7 @@ use tokio::io::BufStream;
 
 use crate::{
     ext::{Either, FutureExt},
-    handler::BoxedCallable,
+    handler::SharedCallable,
     util::get_env_var,
 };
 
@@ -19,7 +19,7 @@ pub mod errors {
     pub use super::proto::{Connection, Eof, Timeout};
 }
 
-pub async fn run(mut handlers: Vec<BoxedCallable>) -> anyhow::Result<()> {
+pub async fn run(handlers: Vec<SharedCallable>) -> anyhow::Result<()> {
     let channels = get_env_var("SHAKEN_TWITCH_CHANNELS")?;
     let channels = channels.split(',').collect::<Vec<_>>();
     anyhow::ensure!(!channels.is_empty(), "channels cannot be empty");
@@ -66,10 +66,11 @@ pub async fn run(mut handlers: Vec<BoxedCallable>) -> anyhow::Result<()> {
                     log::debug!("[{}] {}: {}", target, sender, data);
 
                     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-                    let msg = Message::new(msg, tx);
-                    for handler in &mut handlers {
+                    let irc_msg = Message::new(msg);
+                    let msg = crate::Message::twitch(irc_msg, tx);
+                    for handler in &handlers {
                         // outcome is always () here
-                        handler.call_func(&msg);
+                        (handler)(msg.clone());
                     }
 
                     tokio::spawn(read_responses(msg, rx, write_tx.clone()));
