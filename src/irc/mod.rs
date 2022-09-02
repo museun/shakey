@@ -64,9 +64,9 @@ pub async fn run(mut handlers: Vec<BoxedCallable>) -> anyhow::Result<()> {
                     ..
                 } = msg.command
                 {
-                    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
                     log::debug!("[{}] {}: {}", target, sender, data);
 
+                    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
                     let msg = Message::new(msg, tx);
                     for handler in &mut handlers {
                         // outcome is always () here

@@ -114,14 +114,19 @@ impl WithCommas for u64 {
 }
 
 pub trait FutureExt: Future + Sized {
-    fn select<F>(self, other: F) -> Select<Self, F>;
+    fn select<F>(self, other: F) -> Select<Self, F>
+    where
+        F: Future;
 }
 
 impl<T> FutureExt for T
 where
     T: Future + Sized,
 {
-    fn select<F>(self, other: F) -> Select<Self, F> {
+    fn select<F>(self, other: F) -> Select<Self, F>
+    where
+        F: Future,
+    {
         Select {
             left: self,
             right: other,

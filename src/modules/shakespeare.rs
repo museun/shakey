@@ -49,7 +49,7 @@ impl Shakespeare {
         })
     }
 
-    fn listen(&mut self, msg: &Message<impl Replier>) -> impl Outcome {
+    fn listen(&mut self, msg: &Message<impl Replier>) {
         if msg.data.starts_with('!') {
             return;
         }

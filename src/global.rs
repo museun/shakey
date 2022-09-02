@@ -5,12 +5,6 @@ use parking_lot::RwLock;
 
 use crate::{handler::Commands, templates::Templates};
 
-static COMMANDS: OnceCell<RwLock<Arc<Commands>>> = OnceCell::new();
-static TEMPLATES: OnceCell<RwLock<Arc<Templates>>> = OnceCell::new();
-
-pub static GLOBAL_COMMANDS: Global<'static, Commands> = Global(&COMMANDS);
-pub static GLOBAL_TEMPLATES: Global<'static, Templates> = Global(&TEMPLATES);
-
 pub trait GlobalItem: Sized + Send + Sync + 'static {
     fn description() -> &'static str;
     fn get() -> Arc<Self> {
@@ -38,6 +32,12 @@ impl GlobalItem for Templates {
         "Templates"
     }
 }
+
+static COMMANDS: OnceCell<RwLock<Arc<Commands>>> = OnceCell::new();
+static TEMPLATES: OnceCell<RwLock<Arc<Templates>>> = OnceCell::new();
+
+pub static GLOBAL_COMMANDS: Global<'static, Commands> = Global(&COMMANDS);
+pub static GLOBAL_TEMPLATES: Global<'static, Templates> = Global(&TEMPLATES);
 
 #[derive(Copy, Clone)]
 pub struct Global<'a, T: GlobalItem>(pub(crate) &'a OnceCell<RwLock<Arc<T>>>);
