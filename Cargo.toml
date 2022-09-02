@@ -11,7 +11,7 @@ anyhow           = "1.0.62"
 async-trait      = "0.1.57"
 fastrand         = "1.8.0"
 fastrand_ext     = { git = "https://github.com/museun/fastrand_ext", version = "0.1.0" }
-flume = { version = "0.10.14", default-features = false, features = ["async"] }
+flume            = { version = "0.10.14", default-features = false, features = ["async"] }
 heck             = "0.4.0"
 log              = "0.4.17"
 once_cell        = "1.13.1"
@@ -31,3 +31,6 @@ tokio            = { version = "1.20.1", features = ["rt", "sync", "fs", "macros
 [build-dependencies]
 indoc = "1.0.7"
 time = { version = "0.3.14", features = ["formatting", "parsing", "local-offset"] }
+
+[patch.crates-io]
+simple_env_load = { path = "c:/dev/rs/simple_env_load" }
