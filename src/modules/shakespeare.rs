@@ -2,7 +2,6 @@ use std::{sync::Arc, time::Duration};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-
 use tokio::{sync::Mutex, time::Instant};
 
 use crate::{

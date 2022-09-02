@@ -3,22 +3,21 @@ use tokio::io::BufStream;
 use crate::{
     ext::{Either, FutureExt},
     handler::BoxedCallable,
-    irc::{
-        lower::Command,
-        proto::{connect, join, read_line, read_responses, wait_for_ready, write_raw},
-    },
     util::get_env_var,
 };
 
 mod proto;
-pub mod errors {
-    pub use super::proto::{Connection, Eof, Timeout};
-}
+use proto::{connect, join, read_line, read_responses, wait_for_ready, write_raw};
 
 mod message;
 pub use message::Message;
 
-mod lower;
+mod raw;
+use raw::Command;
+
+pub mod errors {
+    pub use super::proto::{Connection, Eof, Timeout};
+}
 
 pub async fn run(mut handlers: Vec<BoxedCallable>) -> anyhow::Result<()> {
     let channels = get_env_var("SHAKEN_TWITCH_CHANNELS")?;

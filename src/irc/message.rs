@@ -3,7 +3,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{handler::Reply, Replier, Response};
 
-use super::lower::Command;
+use super::raw::Command;
 
 pub struct Message<R>
 where
