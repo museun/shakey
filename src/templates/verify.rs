@@ -45,7 +45,7 @@ fn verify<T>(response: T) -> anyhow::Result<()>
 where
     T: Response + Serialize + 'static,
 {
-    let fields = crate::ser::get_fields_for(&response)
+    let fields = crate::get_fields::get_fields_for(&response)
         .into_iter()
         .collect::<BTreeSet<_>>();
 

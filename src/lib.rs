@@ -15,7 +15,7 @@ pub mod helix;
 pub mod irc;
 pub mod modules;
 
-mod ser;
+mod get_fields;
 mod serde;
 
 mod util;
