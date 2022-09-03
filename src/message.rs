@@ -98,7 +98,7 @@ impl Messages {
 }
 
 #[derive(Copy, Clone, Default)]
-pub(crate) enum SenderPriv {
+enum SenderPriv {
     Admin,
     Moderator,
     #[default]
@@ -112,7 +112,7 @@ pub struct Message<R: Replier> {
     pub(crate) target: Arc<str>,
     pub(crate) data: Arc<str>,
 
-    pub(crate) priv_: SenderPriv,
+    priv_: SenderPriv,
     pub(crate) reply: UnboundedSender<Reply<R>>,
 }
 

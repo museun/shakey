@@ -16,7 +16,7 @@ where
 
 impl<T: Clone> ArcExt<T> for Arc<T> {
     fn unwrap_or_clone(self) -> T {
-        match Arc::try_unwrap(self) {
+        match Self::try_unwrap(self) {
             Ok(this) => this,
             Err(inner) => (*inner).clone(),
         }

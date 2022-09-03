@@ -1,20 +1,5 @@
-use anyhow::Context;
-use std::{collections::HashMap, future::Future, sync::Arc};
+use std::sync::Arc;
 use time::OffsetDateTime;
-use tokio::sync::{mpsc::UnboundedReceiver, Mutex};
-use tokio_stream::StreamExt;
-use twilight_gateway::Shard;
-use twilight_http::Client;
-use twilight_model::{
-    channel::message::MessageType,
-    gateway::Intents,
-    id::{
-        marker::{ChannelMarker, MessageMarker},
-        Id,
-    },
-};
-
-use crate::{env::EnvVar, global::GlobalItem, handler::SharedCallable, Reply, Response, Templates};
 
 #[derive(Clone)]
 pub struct Message {
