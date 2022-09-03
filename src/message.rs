@@ -9,7 +9,11 @@ use time::OffsetDateTime;
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 
-use crate::{ext::ArcExt, Replier, Reply, Response};
+use crate::{
+    ext::ArcExt,
+    responses::{RequiresAdmin, RequiresPermission},
+    Replier, Reply, Response,
+};
 
 pub fn add_message(msg: MessageKind) -> Uuid {
     get_message_static()
@@ -24,6 +28,9 @@ pub enum MessageKind {
 }
 
 pub trait NarrowMessageKind: Sized {
+    fn is_twitch(&self) -> bool;
+    fn is_discord(&self) -> bool;
+
     fn into_twitch(self) -> Option<crate::irc::Message>;
     fn into_discord(self) -> Option<inner::Discord>;
 }
@@ -41,6 +48,14 @@ impl NarrowMessageKind for Arc<MessageKind> {
             MessageKind::Discord(discord) => Some(discord),
             _ => None,
         }
+    }
+
+    fn is_twitch(&self) -> bool {
+        matches!(&**self, MessageKind::Twitch { .. })
+    }
+
+    fn is_discord(&self) -> bool {
+        matches!(&**self, MessageKind::Discord { .. })
     }
 }
 
@@ -177,35 +192,9 @@ impl<R: Replier> Message<R> {
             reply,
         }
     }
+}
 
-    pub const fn id(&self) -> Uuid {
-        self.id
-    }
-
-    pub const fn timestamp(&self) -> OffsetDateTime {
-        self.timestamp
-    }
-
-    pub fn as_discord(&self) -> Option<inner::Discord> {
-        lookup_message(self.id()).and_then(NarrowMessageKind::into_discord)
-    }
-
-    pub fn as_twitch(&self) -> Option<crate::irc::Message> {
-        lookup_message(self.id()).and_then(NarrowMessageKind::into_twitch)
-    }
-
-    pub fn sender(&self) -> &str {
-        &self.sender
-    }
-
-    pub fn target(&self) -> &str {
-        &self.target
-    }
-
-    pub fn data(&self) -> &str {
-        &self.data
-    }
-
+impl<R: Replier> Message<R> {
     pub fn say(&self, item: impl Serialize + Response + 'static) {
         let item = R::say(item);
         let _ = self.reply.send(item);
@@ -220,7 +209,31 @@ impl<R: Replier> Message<R> {
         let item = R::problem(item);
         let _ = self.reply.send(item);
     }
+}
 
+impl<R: Replier> Message<R> {
+    pub const fn id(&self) -> Uuid {
+        self.id
+    }
+
+    pub const fn timestamp(&self) -> OffsetDateTime {
+        self.timestamp
+    }
+
+    pub fn sender(&self) -> &str {
+        &self.sender
+    }
+
+    pub fn target(&self) -> &str {
+        &self.target
+    }
+
+    pub fn data(&self) -> &str {
+        &self.data
+    }
+}
+
+impl<R: Replier> Message<R> {
     pub const fn is_from_broadcaster(&self) -> bool {
         matches!(self.priv_, SenderPriv::Admin)
     }
@@ -230,6 +243,42 @@ impl<R: Replier> Message<R> {
     }
 
     pub const fn is_from_elevated(&self) -> bool {
-        !matches!(self.priv_, SenderPriv::None)
+        !(self.is_from_broadcaster() || self.is_from_moderator())
+    }
+
+    pub fn require_broadcaster(&self) -> bool {
+        if !self.is_from_broadcaster() {
+            self.problem(RequiresAdmin {});
+            return false;
+        }
+        true
+    }
+
+    pub fn requires_permission(&self) -> bool {
+        if !self.is_from_elevated() {
+            self.problem(RequiresPermission {});
+            return false;
+        }
+        true
+    }
+
+    pub fn is_discord(&self) -> bool {
+        lookup_message(self.id())
+            .filter(NarrowMessageKind::is_discord)
+            .is_some()
+    }
+
+    pub fn is_twitch(&self) -> bool {
+        lookup_message(self.id())
+            .filter(NarrowMessageKind::is_twitch)
+            .is_some()
+    }
+
+    pub fn as_discord(&self) -> Option<inner::Discord> {
+        lookup_message(self.id()).and_then(NarrowMessageKind::into_discord)
+    }
+
+    pub fn as_twitch(&self) -> Option<crate::irc::Message> {
+        lookup_message(self.id()).and_then(NarrowMessageKind::into_twitch)
     }
 }

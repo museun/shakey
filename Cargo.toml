@@ -36,3 +36,6 @@ uuid             = { version = "1.1.2", features = ["v4", "serde"] }
 [build-dependencies]
 indoc = "1.0.7"
 time = { version = "0.3.14", features = ["formatting", "parsing", "local-offset"] }
+
+[patch.crates-io]
+simple_env_load = { git = "https://github.com/museun/simple_env_load", rev = "71b10b5" }

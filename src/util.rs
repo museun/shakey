@@ -1,5 +1,6 @@
 use std::{future::Future, path::PathBuf, time::Duration};
 
+// TODO log this, so we can make a static listing
 pub fn get_env_var(key: &str) -> anyhow::Result<String> {
     log::trace!("loading: {key}");
     std::env::var(key).map_err(|_| anyhow::anyhow!("expected '{key}' to exist in env"))

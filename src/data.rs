@@ -124,6 +124,14 @@ where
         let g = self.0.write().await;
         RwLockWriteGuard::map(g, |this| &mut *this)
     }
+
+    pub async fn save(&self) -> anyhow::Result<()>
+    where
+        T: serde::Serialize,
+    {
+        let this = self.0.read().await;
+        FileTypes::save::<_, FORMAT>(&*this).await
+    }
 }
 
 impl<T: Interest, const FORMAT: u8> Clone for WatchFile<T, FORMAT> {
@@ -180,16 +188,16 @@ where
                 let path = Self::get_path(&root);
 
                 let watched = watched.clone();
-                watch_file(path, SLEEP, MODIFICATION, {
-                    move |_| {
-                        let watched = watched.clone();
-                        async move {
-                            let this = FileTypes::load::<_, FORMAT>().await?;
-                            *watched.0.write().await = this;
-                            Ok(())
-                        }
+                let callback = move |_| {
+                    let watched = watched.clone();
+                    async move {
+                        let this = FileTypes::load::<_, FORMAT>().await?;
+                        *watched.0.write().await = this;
+                        Ok(())
                     }
-                })
+                };
+
+                watch_file(path, SLEEP, MODIFICATION, callback)
             };
 
             tokio::spawn(fut);

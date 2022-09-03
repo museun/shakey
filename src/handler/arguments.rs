@@ -16,6 +16,14 @@ impl Arguments {
             .unwrap_or_else(|| panic!("{key} should exist"))
     }
 
+    pub fn take_parsed<T>(&mut self, key: &str) -> Result<T, T::Err>
+    where
+        T: FromStr,
+        T::Err: std::fmt::Display,
+    {
+        self.take(key).parse()
+    }
+
     pub fn get(&self, key: &str) -> Option<&str> {
         self.map.get(key).map(|s| &**s)
     }

@@ -42,6 +42,9 @@ crate::make_response! {
 
     struct RequiresPermission {
     } is "requires_permission"
+
+    struct RequiresAdmin {
+    } is "requires_admin"
 }
 
 pub fn bind_system_errors() -> anyhow::Result<()> {

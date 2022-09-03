@@ -12,7 +12,10 @@ system:
     discord: "invalid arguments: **usage**: `${usage}`"
 
   requires_permission:
-    default: "that requires you to be a moderator or the broadcaster"
+    default: "that requires you to be a moderator or the administrator"
+
+  requires_admin:
+    default: "that requires you to be the administrator"
 
 builtin:
   hello:

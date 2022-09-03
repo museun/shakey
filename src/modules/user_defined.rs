@@ -4,7 +4,6 @@ use crate::{
     data::{Interest, InterestPath},
     ext::IterExt,
     handler::{Bindable, Components},
-    responses::RequiresPermission,
     Arguments, Bind, Message, Outcome, Replier,
 };
 
@@ -133,8 +132,7 @@ impl UserDefined {
     // TODO support !alias
 
     fn add(&mut self, msg: &Message<impl Replier>, mut args: Arguments) -> impl Outcome {
-        if !msg.is_from_elevated() {
-            msg.problem(RequiresPermission {});
+        if !msg.requires_permission() {
             return;
         }
 
@@ -163,8 +161,7 @@ impl UserDefined {
     }
 
     fn update(&mut self, msg: &Message<impl Replier>, mut args: Arguments) -> impl Outcome {
-        if !msg.is_from_elevated() {
-            msg.problem(RequiresPermission {});
+        if !msg.requires_permission() {
             return;
         }
 
@@ -193,8 +190,7 @@ impl UserDefined {
     }
 
     fn remove(&mut self, msg: &Message<impl Replier>, mut args: Arguments) -> impl Outcome {
-        if !msg.is_from_elevated() {
-            msg.problem(RequiresPermission {});
+        if !msg.requires_permission() {
             return;
         }
 
