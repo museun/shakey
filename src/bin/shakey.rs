@@ -134,8 +134,8 @@ async fn main() -> anyhow::Result<()> {
             let stop = notify.notifier();
             async move {
                 match stop.select(shakey::twilight::run(modules)).await {
-                    Either::Left(..) => return,
-                    Either::Right(..) => return,
+                    Either::Left(..) => {}
+                    Either::Right(..) => {}
                 }
             }
         });

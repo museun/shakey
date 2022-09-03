@@ -38,7 +38,7 @@ pub mod simple_human_time {
         S: ::serde::Serializer,
     {
         let mut secs = dt.as_secs();
-        const TABLE: [(&'static str, u64); 3] = [
+        const TABLE: [(&str, u64); 3] = [
             ("hours", 60 * 60), //
             ("minutes", 60),
             ("seconds", 1),
@@ -72,7 +72,7 @@ pub mod simple_human_time {
             .split_terminator(',')
             .flat_map(|s| s.trim().split_once(' '))
             .fold(0_u64, |dur, (head, tail)| {
-                let d = u64::from_str_radix(head, 10).unwrap_or(0);
+                let d = head.parse::<u64>().unwrap_or(0);
                 dur + match tail {
                     "hours" => d * 60 * 60,
                     "minutes" => d * 60,
