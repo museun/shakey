@@ -1,44 +1,30 @@
+use std::sync::Arc;
+
 use anyhow::Context;
-use std::{collections::HashMap, future::Future, sync::Arc};
-use time::OffsetDateTime;
-use tokio::sync::{mpsc::UnboundedReceiver, Mutex};
+
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_stream::StreamExt;
-use twilight_gateway::Shard;
-use twilight_http::Client;
-use twilight_model::{
-    channel::message::MessageType,
-    gateway::Intents,
-    id::{
-        marker::{ChannelMarker, MessageMarker},
-        Id,
+
+use {
+    twilight_gateway::Shard,
+    twilight_http::Client,
+    twilight_model::{
+        channel::message::MessageType,
+        gateway::Intents,
+        id::{
+            marker::{ChannelMarker, MessageMarker},
+            Id,
+        },
     },
 };
 
 use crate::{env::EnvVar, global::GlobalItem, handler::SharedCallable, Reply, Response, Templates};
 
-#[derive(Clone)]
-pub struct Message {
-    pub inner: Arc<twilight_model::channel::Message>,
-    pub source: Arc<str>,
-    pub timestamp: OffsetDateTime,
-}
+mod message;
+pub use message::Message;
 
-impl Message {
-    fn new(inner: twilight_model::channel::Message, source: impl Into<Arc<str>>) -> Self {
-        Self {
-            inner: Arc::new(inner),
-            source: source.into(),
-            timestamp: time::OffsetDateTime::now_utc(),
-        }
-    }
-}
-
-impl std::ops::Deref for Message {
-    type Target = twilight_model::channel::Message;
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
+mod state;
+use state::DiscordState;
 
 pub async fn run(handlers: Vec<SharedCallable>) -> anyhow::Result<()> {
     let oauth_token = crate::env::SHAKEN_DISCORD_OAUTH_TOKEN::get()?;
@@ -139,46 +125,4 @@ async fn get_channel_name(client: &Client, id: Id<ChannelMarker>) -> anyhow::Res
         .name
         .with_context(|| "cannot find name for {id}")?;
     Ok(name)
-}
-
-#[derive(Default)]
-struct DiscordState {
-    channels: Map<ChannelMarker>,
-}
-
-#[derive(Clone)]
-struct Map<T, V = String> {
-    map: Arc<Mutex<HashMap<Id<T>, Arc<V>>>>,
-}
-
-impl<T, V> Default for Map<T, V> {
-    fn default() -> Self {
-        Self {
-            map: Default::default(),
-        }
-    }
-}
-
-impl<T> Map<T>
-where
-    T: Send,
-{
-    async fn update<S, Fut>(
-        &self,
-        id: Id<T>,
-        vacant: impl Fn() -> Fut + Send + Sync,
-    ) -> anyhow::Result<Arc<String>>
-    where
-        S: Into<String> + Send,
-        Fut: Future<Output = anyhow::Result<S>> + Send,
-    {
-        use std::collections::hash_map::Entry;
-        match self.map.lock().await.entry(id) {
-            Entry::Occupied(t) => Ok(t.get().clone()),
-            Entry::Vacant(t) => {
-                let data = vacant().await?.into();
-                Ok(t.insert(Arc::new(data)).clone())
-            }
-        }
-    }
 }
