@@ -163,3 +163,5 @@ another_viewer:
 shakespeare:
   respond:
     default: "~ ${data}"
+  toggle:
+    default: "shakespeare speak state: ${old} -> ${new}"

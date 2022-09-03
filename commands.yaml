@@ -96,5 +96,5 @@ shakespeare:
     command: "!speak"
     description: "forces the bot to speak in prose"
   toggle:
-    command: "!shakespeare toggle "
+    command: "!shakespeare-toggle"
     description: "toggles whether its going to speak"

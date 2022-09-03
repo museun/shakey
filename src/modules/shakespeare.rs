@@ -34,7 +34,7 @@ struct Config {
     min_words: usize,
     max_words: usize,
     chance: f32,
-    #[serde(deserialize_with = "crate::serde::simple_human_time")]
+    #[serde(with = "crate::serde::simple_human_time")]
     cooldown: Duration,
     enabled: bool,
 }
@@ -102,6 +102,7 @@ impl Shakespeare {
         let config = self.config.clone();
         tokio::spawn(async move {
             if !config.get().await.enabled {
+                log::info!("tried to speak, but shakespeare isn't enabled");
                 return;
             }
 
