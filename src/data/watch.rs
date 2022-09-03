@@ -2,8 +2,6 @@ use std::{sync::Arc, time::Duration};
 
 use tokio::sync::RwLock;
 
-use crate::watch_file;
-
 use super::{FileTypes, Interest, WatchFile};
 
 #[async_trait::async_trait]
@@ -43,7 +41,7 @@ where
                 }
             };
 
-            watch_file(path, SLEEP, MODIFICATION, callback)
+            super::watch_file(path, SLEEP, MODIFICATION, callback)
         };
 
         tokio::spawn(fut);

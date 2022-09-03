@@ -8,7 +8,7 @@ mod save_file;
 pub use save_file::SaveFile;
 
 mod watch_file;
-pub use watch_file::WatchFile;
+pub use watch_file::{watch_file, WatchFile};
 
 mod save;
 pub use save::Save;

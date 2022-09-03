@@ -18,9 +18,6 @@ pub mod modules;
 mod get_fields;
 mod serde;
 
-mod util;
-pub use util::watch_file;
-
 // mod testing;
 // pub use testing::mock;
 

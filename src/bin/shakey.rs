@@ -42,7 +42,7 @@ where
     reload::<T>(path.clone()).await?;
 
     Ok(tokio::spawn(async move {
-        let fut = shakey::watch_file(
+        let fut = shakey::data::watch_file(
             path,
             Duration::from_secs(1),
             Duration::from_millis(1),
