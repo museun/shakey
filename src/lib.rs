@@ -80,8 +80,9 @@ pub mod twilight {
         get_env_var, global::GlobalItem, handler::SharedCallable, Reply, Response, Templates,
     };
 
+    #[derive(Clone)]
     pub struct Message {
-        pub inner: twilight_model::channel::Message,
+        pub inner: Arc<twilight_model::channel::Message>,
         pub source: Arc<str>,
         pub timestamp: OffsetDateTime,
     }
@@ -89,7 +90,7 @@ pub mod twilight {
     impl Message {
         fn new(inner: twilight_model::channel::Message, source: impl Into<Arc<str>>) -> Self {
             Self {
-                inner,
+                inner: Arc::new(inner),
                 source: source.into(),
                 timestamp: time::OffsetDateTime::now_utc(),
             }

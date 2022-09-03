@@ -24,7 +24,7 @@ pub fn add_message(msg: MessageKind) -> Uuid {
 #[derive(Clone)]
 pub enum MessageKind {
     Twitch(crate::irc::Message),
-    Discord(inner::Discord),
+    Discord(crate::twilight::Message),
 }
 
 pub trait NarrowMessageKind: Sized {
@@ -32,7 +32,7 @@ pub trait NarrowMessageKind: Sized {
     fn is_discord(&self) -> bool;
 
     fn into_twitch(self) -> Option<crate::irc::Message>;
-    fn into_discord(self) -> Option<inner::Discord>;
+    fn into_discord(self) -> Option<crate::twilight::Message>;
 }
 
 impl NarrowMessageKind for Arc<MessageKind> {
@@ -43,7 +43,7 @@ impl NarrowMessageKind for Arc<MessageKind> {
         }
     }
 
-    fn into_discord(self) -> Option<inner::Discord> {
+    fn into_discord(self) -> Option<crate::twilight::Message> {
         match self.unwrap_or_clone() {
             MessageKind::Discord(discord) => Some(discord),
             _ => None,
@@ -57,14 +57,6 @@ impl NarrowMessageKind for Arc<MessageKind> {
     fn is_discord(&self) -> bool {
         matches!(&**self, MessageKind::Discord { .. })
     }
-}
-
-pub mod inner {
-    #[derive(Clone)]
-    pub struct Twitch {}
-
-    #[derive(Clone)]
-    pub struct Discord {}
 }
 
 static MESSAGES: OnceCell<Mutex<Messages>> = OnceCell::new();
@@ -151,6 +143,10 @@ impl<R: Replier + 'static> Clone for Message<R> {
 }
 
 impl<R: Replier> Message<R> {
+    fn store_message(kind: MessageKind) -> Uuid {
+        add_message(kind)
+    }
+
     pub(crate) fn twitch(msg: crate::irc::Message, reply: UnboundedSender<Reply<R>>) -> Self {
         let is_broadcaster =
             |k: &str, v: &str| (k == "broadcaster" && v == "1").then_some(SenderPriv::Admin);
@@ -162,20 +158,12 @@ impl<R: Replier> Message<R> {
             .find_map(|(k, v)| is_broadcaster(k, v).or_else(|| is_moderator(k, v)))
             .unwrap_or_default();
 
-        let crate::irc::Message {
-            sender,
-            target,
-            data,
-            timestamp,
-            ..
-        } = msg;
-
         Self {
-            id: Uuid::new_v4(),
-            timestamp,
-            sender,
-            target,
-            data,
+            id: Self::store_message(MessageKind::Twitch(msg.clone())),
+            timestamp: msg.timestamp,
+            sender: msg.sender,
+            target: msg.target,
+            data: msg.data,
             priv_,
             reply,
         }
@@ -183,11 +171,11 @@ impl<R: Replier> Message<R> {
 
     pub(crate) fn discord(msg: crate::twilight::Message, reply: UnboundedSender<Reply<R>>) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: Self::store_message(MessageKind::Discord(msg.clone())),
             timestamp: msg.timestamp,
-            sender: msg.inner.author.name.into(),
+            sender: msg.inner.author.name.clone().into(),
             target: msg.source,
-            data: msg.inner.content.into(),
+            data: msg.inner.content.clone().into(),
             priv_: SenderPriv::default(),
             reply,
         }
@@ -274,7 +262,7 @@ impl<R: Replier> Message<R> {
             .is_some()
     }
 
-    pub fn as_discord(&self) -> Option<inner::Discord> {
+    pub fn as_discord(&self) -> Option<crate::twilight::Message> {
         lookup_message(self.id()).and_then(NarrowMessageKind::into_discord)
     }
 
