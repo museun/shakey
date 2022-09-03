@@ -1,9 +1,9 @@
 use tokio::io::BufStream;
 
 use crate::{
+    env::EnvVar,
     ext::{Either, FutureExt},
     handler::SharedCallable,
-    util::get_env_var,
 };
 
 mod proto;
@@ -20,14 +20,14 @@ pub mod errors {
 }
 
 pub async fn run(handlers: Vec<SharedCallable>) -> anyhow::Result<()> {
-    let channels = get_env_var("SHAKEN_TWITCH_CHANNELS")?;
+    let channels = crate::env::SHAKEN_TWITCH_CHANNELS::get()?;
     let channels = channels.split(',').collect::<Vec<_>>();
     anyhow::ensure!(!channels.is_empty(), "channels cannot be empty");
 
     let stream = connect(
-        &get_env_var("SHAKEN_TWITCH_ADDRESS")?,
-        &get_env_var("SHAKEN_TWITCH_NAME")?,
-        &get_env_var("SHAKEN_TWITCH_OAUTH_TOKEN")?,
+        &crate::env::SHAKEN_TWITCH_ADDRESS::get()?,
+        &crate::env::SHAKEN_TWITCH_NAME::get()?,
+        &crate::env::SHAKEN_TWITCH_OAUTH_TOKEN::get()?,
     )
     .await?;
 

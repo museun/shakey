@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    get_env_var,
+    env::EnvVar,
     github::GistClient,
     handler::{Bindable, Components},
     Arguments, Bind, Message, Outcome, Replier,
@@ -33,7 +33,7 @@ impl<R: Replier> Bindable<R> for Vscode {
 
     async fn bind(components: &Components) -> anyhow::Result<Bind<Self, R>> {
         let this = Self {
-            settings_gist_id: get_env_var("SHAKEN_SETTINGS_GIST_ID").map(Arc::from)?,
+            settings_gist_id: crate::env::SHAKEN_SETTINGS_GIST_ID::get().map(Arc::from)?,
             gist_client: components.get(),
         };
 

@@ -1,20 +1,17 @@
 use std::path::{Path, PathBuf};
 
 use super::Interest;
-use crate::get_env_var;
+use crate::env::EnvVar as _;
 
-pub fn get_data_path<T>() -> anyhow::Result<PathBuf>
-where
-    T: Interest,
-{
-    get_env_var("SHAKEN_DATA_DIR").map(PathBuf::from)
+pub fn get_data_path() -> anyhow::Result<PathBuf> {
+    crate::env::SHAKEN_DATA_DIR::get().map(PathBuf::from)
 }
 
 pub async fn save_yaml<T: Interest>(val: &T) -> anyhow::Result<()>
 where
     T: serde::Serialize + Send + Sync,
 {
-    let root = get_env_var("SHAKEN_DATA_DIR").map(PathBuf::from)?;
+    let root = get_data_path()?;
     save_yaml_to(val, &root).await
 }
 
@@ -31,7 +28,7 @@ pub async fn load_yaml<T>() -> anyhow::Result<T>
 where
     T: Interest + for<'de> serde::Deserialize<'de>,
 {
-    load_yaml_from(&get_data_path::<T>()?).await
+    load_yaml_from(&get_data_path()?).await
 }
 
 pub async fn load_yaml_from<T>(root: &Path) -> anyhow::Result<T>

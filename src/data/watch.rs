@@ -1,8 +1,8 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use tokio::sync::RwLock;
 
-use crate::{get_env_var, watch_file};
+use crate::watch_file;
 
 use super::{FileTypes, Interest, WatchFile};
 
@@ -30,7 +30,7 @@ where
         };
 
         let fut = {
-            let root = get_env_var("SHAKEN_DATA_DIR").map(PathBuf::from)?;
+            let root = super::helpers::get_data_path()?;
             let path = Self::get_path(&root);
 
             let watched = watched.clone();

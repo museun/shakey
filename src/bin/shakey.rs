@@ -5,8 +5,8 @@ use std::{future::Future, path::PathBuf, sync::Arc, time::Duration};
 use shakey::{
     config::Config,
     data::Interest,
+    env::EnvVar,
     ext::{Either, FutureExt},
-    get_env_var,
     global::{Global, GlobalItem},
     handler::{Bindable, Components, SharedCallable},
     irc,
@@ -37,7 +37,7 @@ where
         Ok(())
     }
 
-    let config_root = get_env_var("SHAKEN_CONFIG_DIR").map(PathBuf::from)?;
+    let config_root = shakey::env::SHAKEN_CONFIG_DIR::get().map(PathBuf::from)?;
     let path = T::get_path(&config_root);
     reload::<T>(path.clone()).await?;
 

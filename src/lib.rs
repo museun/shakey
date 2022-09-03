@@ -19,7 +19,7 @@ mod get_fields;
 mod serde;
 
 mod util;
-pub use util::{get_env_var, watch_file};
+pub use util::watch_file;
 
 // mod testing;
 // pub use testing::mock;
@@ -77,7 +77,7 @@ pub mod twilight {
     };
 
     use crate::{
-        get_env_var, global::GlobalItem, handler::SharedCallable, Reply, Response, Templates,
+        env::EnvVar, global::GlobalItem, handler::SharedCallable, Reply, Response, Templates,
     };
 
     #[derive(Clone)]
@@ -105,7 +105,7 @@ pub mod twilight {
     }
 
     pub async fn run(handlers: Vec<SharedCallable>) -> anyhow::Result<()> {
-        let oauth_token = get_env_var("SHAKEN_DISCORD_OAUTH_TOKEN")?;
+        let oauth_token = crate::env::SHAKEN_DISCORD_OAUTH_TOKEN::get()?;
         let client = Arc::new(twilight_http::Client::new(oauth_token.clone()));
 
         let (shard, mut events) = Shard::new(
